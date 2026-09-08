@@ -107,9 +107,7 @@ async def test_setup_connection_failure_does_not_log_token(
     hass, aioclient_mock, caplog
 ) -> None:
     """Keep credentials out of HA logs when setup enters retry state."""
-    aioclient_mock.get(
-        f"{BASE_URL}/api/v1/health", exc=ClientConnectionError(TOKEN)
-    )
+    aioclient_mock.get(f"{BASE_URL}/api/v1/health", exc=ClientConnectionError(TOKEN))
     entry = make_entry()
     entry.add_to_hass(hass)
 
