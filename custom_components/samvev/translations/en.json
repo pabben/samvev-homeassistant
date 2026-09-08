@@ -1,0 +1,64 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This Samvev server is already configured."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Samvev.",
+      "invalid_auth": "The API token was rejected.",
+      "invalid_response": "Samvev returned an unsupported response.",
+      "invalid_url": "Enter a valid HTTP or HTTPS base URL without credentials.",
+      "unknown": "Unexpected error."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "api_token": "API token",
+          "base_url": "Server URL"
+        },
+        "data_description": {
+          "api_token": "Token used only for authenticated requests to Samvev.",
+          "base_url": "Base URL of the Samvev server."
+        },
+        "description": "Connect Home Assistant to a Samvev server.",
+        "title": "Connect to Samvev"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "attention_count": {
+        "name": "Attention count"
+      },
+      "next_attention": {
+        "name": "Next attention"
+      },
+      "status": {
+        "name": "API status"
+      }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "The request to Samvev failed."
+    },
+    "action_invalid_auth": {
+      "message": "Samvev rejected the API token. Reconfigure the integration."
+    },
+    "entities_not_found": {
+      "message": "These selected entities do not exist: {entity_ids}"
+    },
+    "entry_not_found": {
+      "message": "The selected Samvev connection was not found."
+    },
+    "entry_not_loaded": {
+      "message": "The selected Samvev connection is not loaded."
+    },
+    "entry_required": {
+      "message": "Select a Samvev connection when multiple connections are loaded."
+    },
+    "event_rejected": {
+      "message": "Samvev rejected the event."
+    }
+  }
+}

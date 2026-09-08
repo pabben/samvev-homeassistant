@@ -1,0 +1,62 @@
+ask:
+  name: Ask Samvev
+  description: Send a query to Samvev and return its structured answer.
+  fields:
+    prompt:
+      name: Prompt
+      description: The question or instruction for Samvev.
+      required: true
+      example: What needs attention tomorrow?
+      selector:
+        text:
+          multiline: true
+    context:
+      name: Context
+      description: Optional structured context supplied explicitly with the query.
+      required: false
+      example:
+        channel: home
+      selector:
+        object:
+    config_entry_id:
+      name: Samvev connection
+      description: Required only when more than one Samvev connection is loaded.
+      required: false
+      selector:
+        config_entry:
+          integration: samvev
+
+event:
+  name: Send event to Samvev
+  description: Send a generic event and optional explicitly selected entity states.
+  fields:
+    event_type:
+      name: Event type
+      description: A stable, generic event type understood by Samvev Core.
+      required: true
+      example: household.context_changed
+      selector:
+        text:
+    data:
+      name: Data
+      description: Structured event payload controlled by the caller.
+      required: false
+      example:
+        reason: automation
+      selector:
+        object:
+    entity_ids:
+      name: Entities
+      description: Entities whose current state should be included explicitly.
+      required: false
+      selector:
+        entity:
+          multiple: true
+    config_entry_id:
+      name: Samvev connection
+      description: Required only when more than one Samvev connection is loaded.
+      required: false
+      selector:
+        config_entry:
+          integration: samvev
+

@@ -1,0 +1,64 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Denne Samvev-serveren er allerede konfigurert."
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke koble til Samvev.",
+      "invalid_auth": "API-tokenet ble avvist.",
+      "invalid_response": "Samvev returnerte et svar som ikke støttes.",
+      "invalid_url": "Oppgi en gyldig HTTP- eller HTTPS-adresse uten innloggingsinformasjon.",
+      "unknown": "Uventet feil."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "api_token": "API-token",
+          "base_url": "Serveradresse"
+        },
+        "data_description": {
+          "api_token": "Tokenet brukes bare for autentiserte forespørsler til Samvev.",
+          "base_url": "Grunnadressen til Samvev-serveren."
+        },
+        "description": "Koble Home Assistant til en Samvev-server.",
+        "title": "Koble til Samvev"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "attention_count": {
+        "name": "Antall oppmerksomhetspunkter"
+      },
+      "next_attention": {
+        "name": "Neste oppmerksomhetspunkt"
+      },
+      "status": {
+        "name": "API-status"
+      }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Forespørselen til Samvev mislyktes."
+    },
+    "action_invalid_auth": {
+      "message": "Samvev avviste API-tokenet. Konfigurer integrasjonen på nytt."
+    },
+    "entities_not_found": {
+      "message": "Disse valgte enhetene finnes ikke: {entity_ids}"
+    },
+    "entry_not_found": {
+      "message": "Den valgte Samvev-tilkoblingen ble ikke funnet."
+    },
+    "entry_not_loaded": {
+      "message": "Den valgte Samvev-tilkoblingen er ikke lastet."
+    },
+    "entry_required": {
+      "message": "Velg en Samvev-tilkobling når flere tilkoblinger er lastet."
+    },
+    "event_rejected": {
+      "message": "Samvev avviste hendelsen."
+    }
+  }
+}
