@@ -40,7 +40,8 @@ chooses notification recipients, or decides that an attention item is relevant.
 
 ### Setup and polling
 
-1. Config flow calls `health` before persisting an entry.
+1. Config flow calls `health` before persisting an entry. Authentication failures
+   later start a token replacement flow that validates identity and reloads the entry.
 2. Config-entry setup calls `health` again so startup failures use HA retry/auth
    semantics.
 3. The coordinator reads `context`; it never asks Core to interpret source data.
@@ -77,4 +78,3 @@ implementation choice and should normally occur only when source information cha
 - no schedule or weather interpretation
 - no HA-specific notification policy
 - no Homey/mobile/web implementation
-

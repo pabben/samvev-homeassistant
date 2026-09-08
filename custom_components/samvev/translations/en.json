@@ -1,7 +1,9 @@
 {
   "config": {
     "abort": {
-      "already_configured": "This Samvev server is already configured."
+      "already_configured": "This Samvev server is already configured.",
+      "reauth_successful": "Reauthentication was successful.",
+      "wrong_account": "The token belongs to a different Samvev server."
     },
     "error": {
       "cannot_connect": "Failed to connect to Samvev.",
@@ -11,6 +13,16 @@
       "unknown": "Unexpected error."
     },
     "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_token": "API token"
+        },
+        "data_description": {
+          "api_token": "Replacement token for this Samvev server."
+        },
+        "description": "The API token was rejected. Enter a new token to reconnect.",
+        "title": "Reauthenticate Samvev"
+      },
       "user": {
         "data": {
           "api_token": "API token",

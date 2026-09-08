@@ -161,11 +161,12 @@ client module.
 
 ## Planned later
 
-Potential follow-up work includes reauthentication/reconfiguration UI, a stable
-server capability handshake, server-to-HA event delivery, Assist integration, and
-official branding/release automation. Calendar interpretation, family/person models,
-AI calls, rules, memories, notification relevance, scraping, and other adapters
-belong in Samvev Core or their own repositories.
+Authentication failures start a UI reauthentication flow for replacing the token.
+Potential follow-up work includes base-URL reconfiguration UI, a stable server
+capability handshake, server-to-HA event delivery, Assist integration, and official
+branding/release automation. Calendar interpretation, family/person models, AI calls,
+rules, memories, notification relevance, scraping, and other adapters belong in
+Samvev Core or their own repositories.
 
 ## License
 

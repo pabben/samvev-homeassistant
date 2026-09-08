@@ -1,7 +1,9 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Denne Samvev-serveren er allerede konfigurert."
+      "already_configured": "Denne Samvev-serveren er allerede konfigurert.",
+      "reauth_successful": "Ny autentisering var vellykket.",
+      "wrong_account": "Tokenet tilhører en annen Samvev-server."
     },
     "error": {
       "cannot_connect": "Kunne ikke koble til Samvev.",
@@ -11,6 +13,16 @@
       "unknown": "Uventet feil."
     },
     "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_token": "API-token"
+        },
+        "data_description": {
+          "api_token": "Nytt token for denne Samvev-serveren."
+        },
+        "description": "API-tokenet ble avvist. Oppgi et nytt token for å koble til igjen.",
+        "title": "Autentiser Samvev på nytt"
+      },
       "user": {
         "data": {
           "api_token": "API-token",

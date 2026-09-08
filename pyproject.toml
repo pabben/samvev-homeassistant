@@ -38,6 +38,7 @@ exclude_also = [
   "raise NotImplementedError",
 ]
 show_missing = true
+fail_under = 85
 
 [tool.ruff]
 target-version = "py313"

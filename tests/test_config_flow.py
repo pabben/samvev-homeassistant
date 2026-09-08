@@ -1,6 +1,6 @@
 """Tests for the Samvev config flow."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant import config_entries, data_entry_flow
@@ -112,3 +112,55 @@ async def test_duplicate_instance_aborts(hass) -> None:
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_reauthentication_recovers_and_reloads(hass) -> None:
+    """Replace a rejected token through the UI and reload the existing entry."""
+    entry = MockConfigEntry(
+        data=USER_INPUT,
+        domain=DOMAIN,
+        source=config_entries.SOURCE_USER,
+        title="Existing",
+        unique_id="instance-1",
+    )
+    entry.add_to_hass(hass)
+    replacement_token = "replacement-token"  # noqa: S105
+    with (
+        patch(
+            "custom_components.samvev.config_flow.SamvevClient.async_health",
+            side_effect=[
+                SamvevAuthenticationError("rejected"),
+                HealthStatus("ok", "instance-1"),
+            ],
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
+        ) as reload_entry,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+                "unique_id": entry.unique_id,
+            },
+            data=entry.data,
+        )
+        assert result["type"] is data_entry_flow.FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_API_TOKEN: "still-invalid"}
+        )
+        assert result["type"] is data_entry_flow.FlowResultType.FORM
+        assert result["errors"] == {"base": "invalid_auth"}
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_API_TOKEN: replacement_token}
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_API_TOKEN] == replacement_token
+    reload_entry.assert_awaited_once_with(entry.entry_id)

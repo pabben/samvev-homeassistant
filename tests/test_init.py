@@ -3,6 +3,7 @@
 from http import HTTPStatus
 
 import pytest
+from aiohttp import ClientConnectionError
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -100,3 +101,20 @@ async def test_setup_maps_health_failures(
 
     with pytest.raises(expected):
         await async_setup_entry(hass, entry)
+
+
+async def test_setup_connection_failure_does_not_log_token(
+    hass, aioclient_mock, caplog
+) -> None:
+    """Keep credentials out of HA logs when setup enters retry state."""
+    aioclient_mock.get(
+        f"{BASE_URL}/api/v1/health", exc=ClientConnectionError(TOKEN)
+    )
+    entry = make_entry()
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert TOKEN not in caplog.text
