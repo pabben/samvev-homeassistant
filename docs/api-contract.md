@@ -1,151 +1,65 @@
-# Provisional Samvev API contract
+# Native HA bridge protocol
 
-Status: **v0.1 draft**. This describes the adapter's current boundary, not a final
-Samvev Core API. All endpoints are relative to the configured base URL, including any
-deployment path.
+Version: `schemaVersion: 1`, integration version 0.2.0. The canonical contract and
+server enforcement live in [Samvev HA_BRIDGE_API.md](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md).
+Every request starts at the configured base URL plus `/api/v1/ha`, carries the
+separate bearer credential and refuses redirects. Responses are size/time bounded.
+The public `/health` endpoint does not validate authorization. The old local
+adapter's provisional `/context`, `/ask` and `/events` protocol is replaced.
 
-## Common behavior
+| Endpoint | Purpose |
+|---|---|
+| `GET /connection` | Authenticated schema, installation/connection identity, timezone, capabilities, grants |
+| `GET /snapshot` | Complete explicitly shared grocery board, active messages and calendar descriptors |
+| `POST /lists/groceries/items` | Add label and checked state |
+| `PATCH, DELETE /lists/groceries/items/:id` | Revision-protected edit/check/reopen or deletion |
+| `POST /messages` | Create as this connection, targeting only allowed recipients |
+| `PATCH /messages/:id`, `POST /messages/:id/withdraw` | Edit/withdraw this connection's own message |
+| `GET /calendars/:id/events?start=…&end=…` | All overlapping allowed events in the exact interval, up to 366 days |
+| `POST /calendars/samvev/events` | Create an own Samvev event |
+| `PATCH, DELETE /calendars/samvev/events/:id` | Edit/cancel own event using its observed revision |
 
-- Prefix: `/api/v1`
-- Encoding: JSON request and response objects
-- Authentication: `Authorization: Bearer <API token>` on every request
-- Success: any 2xx status with the documented JSON object
-- Authentication failure: 401 or 403
-- Other non-2xx status: connection/API failure; response bodies are not copied into
-  HA errors or logs
-- Client timeout: 10 seconds per request
+JSON field names are camelCase. HA action input uses HA-style snake_case and
+converts at the client boundary. Every mutation carries `requestKey`; edits and
+deletes also carry `expectedRevision`. Do not regenerate the key after a timeout.
+The coordinator persists hashes and keys before dispatch. Ambiguous attempts can
+reuse their operation key after restart. Successfully acknowledged identical
+button operations reuse a key for ten seconds to collapse repeated presses;
+explicit keys can control intentional repeated additions. Pending data is key
+metadata, not a second content store. Removing the config entry deletes this store.
 
-Unknown response keys are ignored for forward compatibility. Required values and
-provided optional values are type-checked. The API token must never appear in an
-error response or application log.
+A 409 triggers refresh and a visible conflict error. It never fetches a newer
+revision merely to overwrite it. Calendar edits require an event revision already
+observed by this entity; query the event first after a restart. Network errors
+retain the previous safe projection as unavailable/stale; they never clear lists.
+401/403 triggers authority refresh/reauth and removes protected data. Revocation
+is enforced server-side immediately; an already rendered HA view learns of it
+on its next request, normally the next 30-second poll. No polling adapter can erase
+a screenshot or previously viewed content from somebody's memory.
 
-## Health
+Calendar all-day values are civil `YYYY-MM-DD` dates with exclusive end. Timed
+events are timezone-aware ISO instants. Imported occurrences are expanded by
+Samvev's existing provider importer; no independent recurrence engine is added to
+HA. Moves, overrides and cancellations retain server identities/revisions.
+Imported source windows and upstream cache delays still apply. Source freshness
+is distinct from successful HA polling and is exposed in calendar attributes.
+HA calendar exports are excluded from the Samvev HA importer to avoid feedback.
 
-`GET /api/v1/health`
+The existing `integration.items.read` capability continues to read only a
+connection's own external items. It does not grant family data. Dedicated
+`ha.groceries.read/write`, `ha.messages.read/write` and `ha.calendar.read/write`
+capabilities combine with explicit server-side grants. Mutation endpoints require
+both the corresponding read and write capability because their responses return
+the authoritative resource. Write permission never implicitly creates read permission. A household grant permits
+household-addressed content; selected people are **readers**, not inferred subjects.
+Imported sources additionally require their explicit source IDs.
 
-```json
-{
-  "status": "ok",
-  "instance_id": "stable-server-id",
-  "name": "Optional display name"
-}
-```
+Messages preserve simultaneous entries and expire locally even before a later
+poll. The sensor state is the count, with complete active messages in attributes.
+HA does not acknowledge display rendering, reading, approval or task completion.
+No XP/reward service is invoked. A HA dashboard user's identity is not mapped to a
+Samvev person. The durable audit actor is the integration connection and credential.
 
-`status` is required and is currently `ok` or `healthy`. `instance_id` and `name` are
-optional strings. A stable, non-secret `instance_id` is strongly recommended; the
-config flow uses it to prevent duplicate entries. Otherwise the normalized base URL
-is the identity.
-
-Health should be cheap and must not trigger AI work.
-
-## Context projection
-
-`GET /api/v1/context`
-
-```json
-{
-  "status": "connected",
-  "attention_count": 1,
-  "next_attention": {
-    "id": "attention-123",
-    "summary": "Bring the required equipment",
-    "due_at": "2026-09-09T08:00:00Z",
-    "kind": "reminder"
-  }
-}
-```
-
-All top-level fields are optional. `attention_count` is a non-negative integer or
-null. `next_attention` is an object or null; when present, `summary` is required and
-the other fields are optional strings. The adapter truncates summaries longer than
-255 characters only in the HA state string and retains the full summary as an entity
-attribute.
-
-This is a read model computed and stored by Core. Reading it must not invoke an LLM
-or redo schedule/rule processing. For early server implementations only, 404 means
-the projection capability is absent and yields connected/unknown adapter state.
-
-## Ask
-
-`POST /api/v1/ask`
-
-Request:
-
-```json
-{
-  "prompt": "What needs attention tomorrow?",
-  "context": {"channel": "home"}
-}
-```
-
-`prompt` is a non-empty string. `context` is optional and caller-controlled.
-
-Response:
-
-```json
-{
-  "answer": "One item needs attention.",
-  "request_id": "request-123",
-  "data": {"attention_count": 1}
-}
-```
-
-`answer` is required. `request_id` and object `data` are optional. The HA action
-requires response data and returns these values to the caller.
-
-## Event
-
-`POST /api/v1/events`
-
-Request without entity context:
-
-```json
-{
-  "type": "household.context_changed",
-  "data": {"reason": "automation"},
-  "source": "home_assistant"
-}
-```
-
-If the action explicitly selected entities, an additional context object is sent:
-
-```json
-{
-  "type": "household.context_changed",
-  "data": {},
-  "source": "home_assistant",
-  "context": {
-    "entities": [
-      {
-        "entity_id": "weather.home",
-        "state": "rainy",
-        "last_changed": "2026-09-08T12:00:00+00:00"
-      }
-    ]
-  }
-}
-```
-
-The adapter never adds attributes or unselected entities. `type` is a non-empty
-generic string; naming/versioning conventions remain a Core decision. `data` is an
-object.
-
-Response:
-
-```json
-{
-  "accepted": true,
-  "event_id": "event-123"
-}
-```
-
-`accepted` is required and boolean. `event_id` is optional. `accepted: false` becomes
-a visible HA action error.
-
-## Expected evolution
-
-A capability/version document, explicit error envelope, idempotency semantics,
-reauthentication hints, inbound Core-to-adapter events, and richer deliberately
-selected context may be added later. Those changes should be implemented first at
-this client boundary and must preserve data minimization.
-
+Known model limits: one existing grocery board; grocery fields are label/checked
+only; own calendar recurrence creation is unsupported; imported provider writes
+are unsupported; HA can edit/withdraw only its own messages and calendar events.

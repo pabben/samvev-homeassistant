@@ -1,4 +1,4 @@
-"""Tests for the Samvev config flow."""
+"""GUI setup, reauthorization and endpoint migration tests."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -7,25 +7,31 @@ from homeassistant import config_entries, data_entry_flow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.samvev.api import (
-    HealthStatus,
     SamvevAuthenticationError,
     SamvevConnectionError,
     SamvevInvalidResponseError,
 )
 from custom_components.samvev.const import CONF_API_TOKEN, CONF_BASE_URL, DOMAIN
 
-USER_INPUT = {
-    CONF_BASE_URL: "https://samvev.example/",
-    CONF_API_TOKEN: "secret-token",
-}
+from .conftest import BASE_URL, CONNECTION, TOKEN
+
+USER_INPUT = {CONF_BASE_URL: f"{BASE_URL}/", CONF_API_TOKEN: TOKEN}
+IDENTITY = "installation-1:connection-1"
 
 
-async def test_user_flow_creates_entry(hass) -> None:
-    """Validate the server and store normalized connection data."""
+def make_entry():
+    """Return an entry bound to the exact machine connection."""
+    return MockConfigEntry(
+        domain=DOMAIN, data=USER_INPUT, title="Synthetic", unique_id=IDENTITY
+    )
+
+
+async def test_user_flow_creates_connection_bound_entry(hass, connection):
+    """Create one entry per installation and connection, not per server URL."""
     with (
         patch(
-            "custom_components.samvev.config_flow.SamvevClient.async_health",
-            return_value=HealthStatus("ok", "instance-1", "Family Samvev"),
+            "custom_components.samvev.config_flow.SamvevClient.async_connection",
+            return_value=connection,
         ),
         patch("custom_components.samvev.async_setup_entry", return_value=True),
     ):
@@ -36,14 +42,10 @@ async def test_user_flow_creates_entry(hass) -> None:
             result["flow_id"], USER_INPUT
         )
         await hass.async_block_till_done()
-
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Family Samvev"
-    assert result["data"] == {
-        CONF_BASE_URL: "https://samvev.example",
-        CONF_API_TOKEN: "secret-token",
-    }
-    assert result["result"].unique_id == "instance-1"
+    assert result["title"] == CONNECTION["name"]
+    assert result["data"] == {CONF_BASE_URL: BASE_URL, CONF_API_TOKEN: TOKEN}
+    assert result["result"].unique_id == IDENTITY
 
 
 @pytest.mark.parametrize(
@@ -54,10 +56,10 @@ async def test_user_flow_creates_entry(hass) -> None:
         (SamvevInvalidResponseError("bad"), "invalid_response"),
     ],
 )
-async def test_user_flow_reports_connection_errors(hass, error, flow_error) -> None:
-    """Keep the form open with a useful error for known API failures."""
+async def test_flow_reports_known_failures(hass, error, flow_error):
+    """Keep setup open when the token or supported protocol is invalid."""
     with patch(
-        "custom_components.samvev.config_flow.SamvevClient.async_health",
+        "custom_components.samvev.config_flow.SamvevClient.async_connection",
         side_effect=error,
     ):
         result = await hass.config_entries.flow.async_init(
@@ -66,16 +68,15 @@ async def test_user_flow_reports_connection_errors(hass, error, flow_error) -> N
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], USER_INPUT
         )
-
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["errors"] == {"base": flow_error}
 
 
-async def test_user_flow_rejects_invalid_url_without_request(hass) -> None:
-    """Reject credentials in URLs before constructing a request."""
+async def test_invalid_url_never_sends_token(hass):
+    """Reject credentials in a URL before network I/O."""
     with patch(
-        "custom_components.samvev.config_flow.SamvevClient.async_health"
-    ) as health:
+        "custom_components.samvev.config_flow.SamvevClient.async_connection"
+    ) as request:
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
@@ -83,25 +84,16 @@ async def test_user_flow_rejects_invalid_url_without_request(hass) -> None:
             result["flow_id"],
             {**USER_INPUT, CONF_BASE_URL: "https://user:pass@samvev.example"},
         )
-
-    assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_url"}
-    health.assert_not_awaited()
+    request.assert_not_awaited()
 
 
-async def test_duplicate_instance_aborts(hass) -> None:
-    """Do not configure the same Samvev instance twice."""
-    existing = MockConfigEntry(
-        data=USER_INPUT,
-        domain=DOMAIN,
-        source=config_entries.SOURCE_USER,
-        title="Existing",
-        unique_id="instance-1",
-    )
-    existing.add_to_hass(hass)
+async def test_duplicate_connection_aborts(hass, connection):
+    """Keep stable IDs when the same connection is entered through a new URL."""
+    make_entry().add_to_hass(hass)
     with patch(
-        "custom_components.samvev.config_flow.SamvevClient.async_health",
-        return_value=HealthStatus("ok", "instance-1"),
+        "custom_components.samvev.config_flow.SamvevClient.async_connection",
+        return_value=connection,
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -109,29 +101,17 @@ async def test_duplicate_instance_aborts(hass) -> None:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], USER_INPUT
         )
-
-    assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
-async def test_reauthentication_recovers_and_reloads(hass) -> None:
-    """Replace a rejected token through the UI and reload the existing entry."""
-    entry = MockConfigEntry(
-        data=USER_INPUT,
-        domain=DOMAIN,
-        source=config_entries.SOURCE_USER,
-        title="Existing",
-        unique_id="instance-1",
-    )
+async def test_reauth_rotates_same_connection(hass, connection):
+    """A replacement key is validated before updating and reloading the entry."""
+    entry = make_entry()
     entry.add_to_hass(hass)
-    replacement_token = "replacement-token"  # noqa: S105
     with (
         patch(
-            "custom_components.samvev.config_flow.SamvevClient.async_health",
-            side_effect=[
-                SamvevAuthenticationError("rejected"),
-                HealthStatus("ok", "instance-1"),
-            ],
+            "custom_components.samvev.config_flow.SamvevClient.async_connection",
+            side_effect=[SamvevAuthenticationError(), connection],
         ),
         patch.object(
             hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
@@ -146,21 +126,78 @@ async def test_reauthentication_recovers_and_reloads(hass) -> None:
             },
             data=entry.data,
         )
-        assert result["type"] is data_entry_flow.FlowResultType.FORM
-        assert result["step_id"] == "reauth_confirm"
-
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_API_TOKEN: "still-invalid"}
+            result["flow_id"], {CONF_API_TOKEN: "invalid-token"}
         )
-        assert result["type"] is data_entry_flow.FlowResultType.FORM
         assert result["errors"] == {"base": "invalid_auth"}
-
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_API_TOKEN: replacement_token}
+            result["flow_id"], {CONF_API_TOKEN: "replacement-token"}
         )
         await hass.async_block_till_done()
-
-    assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
-    assert entry.data[CONF_API_TOKEN] == replacement_token
+    assert entry.data[CONF_API_TOKEN] == "replacement-token"
     reload_entry.assert_awaited_once_with(entry.entry_id)
+
+
+async def test_reconfigure_url_preserves_identity(hass, connection):
+    """Allow relocation only after the new endpoint authenticates same identity."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    with (
+        patch(
+            "custom_components.samvev.config_flow.SamvevClient.async_connection",
+            return_value=connection,
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_RECONFIGURE,
+                "entry_id": entry.entry_id,
+            },
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_BASE_URL: "https://relocated.example/root",
+                CONF_API_TOKEN: "replacement-token",
+            },
+        )
+        await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_BASE_URL] == "https://relocated.example/root"
+    assert entry.unique_id == IDENTITY
+
+
+@pytest.mark.parametrize(
+    "source", [config_entries.SOURCE_REAUTH, config_entries.SOURCE_RECONFIGURE]
+)
+async def test_rotation_to_other_connection_rejected(hass, connection, source):
+    """Never silently transfer existing dashboard entities to another household."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    connection["connectionId"] = "different-connection"
+    with patch(
+        "custom_components.samvev.config_flow.SamvevClient.async_connection",
+        return_value=connection,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": source,
+                "entry_id": entry.entry_id,
+                "unique_id": entry.unique_id,
+            },
+            data=entry.data if source == config_entries.SOURCE_REAUTH else None,
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            USER_INPUT
+            if source == config_entries.SOURCE_RECONFIGURE
+            else {CONF_API_TOKEN: TOKEN},
+        )
+    assert result["reason"] == "unique_id_mismatch"
+    assert entry.data == USER_INPUT

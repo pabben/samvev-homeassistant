@@ -1,10 +1,8 @@
-"""Config flow for the Samvev integration."""
+"""GUI setup, URL reconfiguration and machine-token reauthorization."""
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
@@ -15,134 +13,153 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
 from .api import (
+    SamvevApiError,
     SamvevAuthenticationError,
     SamvevClient,
     SamvevConnectionError,
-    SamvevInvalidResponseError,
     normalize_base_url,
 )
 from .const import CONF_API_TOKEN, CONF_BASE_URL, DEFAULT_REQUEST_TIMEOUT, DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-STEP_USER_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_BASE_URL): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.URL)
-        ),
-        vol.Required(CONF_API_TOKEN): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.PASSWORD)
-        ),
-    }
-)
 
-REAUTH_SCHEMA = vol.Schema(
-    {
+def _schema(base_url: str | None = None, *, token_only: bool = False) -> vol.Schema:
+    fields = {
         vol.Required(CONF_API_TOKEN): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         )
     }
-)
+    if not token_only:
+        key = (
+            vol.Required(CONF_BASE_URL, default=base_url)
+            if base_url
+            else vol.Required(CONF_BASE_URL)
+        )
+        fields[key] = TextSelector(TextSelectorConfig(type=TextSelectorType.URL))
+    return vol.Schema(fields)
 
 
 class SamvevConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a Samvev config flow."""
+    """Bind one HA entry to one separately revocable Samvev connection."""
 
     VERSION = 1
+
+    async def _validate(
+        self, base_url: str, token: str
+    ) -> tuple[str | None, dict[str, Any] | None, str | None]:
+        try:
+            normalized = normalize_base_url(base_url)
+            connection = await SamvevClient(
+                normalized,
+                token,
+                async_get_clientsession(self.hass),
+                timeout=DEFAULT_REQUEST_TIMEOUT,
+            ).async_connection()
+        except ValueError:
+            return None, None, "invalid_url"
+        except SamvevAuthenticationError:
+            return None, None, "invalid_auth"
+        except SamvevConnectionError:
+            return None, None, "cannot_connect"
+        except SamvevApiError:
+            return None, None, "invalid_response"
+        return normalized, connection, None
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Verify the bridge protocol and bearer authority before creating entry."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            base_url, connection, error = await self._validate(
+                user_input[CONF_BASE_URL], user_input[CONF_API_TOKEN]
+            )
+            if error:
+                errors["base"] = error
+            else:
+                if connection is None or base_url is None:
+                    raise RuntimeError("Missing validated connection")
+                await self.async_set_unique_id(
+                    f"{connection['installationId']}:{connection['connectionId']}"
+                )
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=connection["name"],
+                    data={
+                        CONF_BASE_URL: base_url,
+                        CONF_API_TOKEN: user_input[CONF_API_TOKEN],
+                    },
+                )
+        return self.async_show_form(
+            step_id="user", data_schema=_schema(), errors=errors
+        )
 
     async def async_step_reauth(
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
-        """Start reauthentication after an API authentication failure."""
+        """Ask for a replacement machine credential for this connection."""
         self._reauth_base_url = entry_data[CONF_BASE_URL]
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Validate and save a replacement API token."""
+        """Keep stable identity while replacing a rejected or expired token."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            client = SamvevClient(
-                self._reauth_base_url,
-                user_input[CONF_API_TOKEN],
-                async_get_clientsession(self.hass),
-                timeout=DEFAULT_REQUEST_TIMEOUT,
+            _, connection, error = await self._validate(
+                self._reauth_base_url, user_input[CONF_API_TOKEN]
             )
-            try:
-                health = await client.async_health()
-            except SamvevAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except SamvevConnectionError:
-                errors["base"] = "cannot_connect"
-            except SamvevInvalidResponseError:
-                errors["base"] = "invalid_response"
-            except Exception:
-                _LOGGER.exception("Unexpected error while reauthenticating Samvev")
-                errors["base"] = "unknown"
+            if error:
+                errors["base"] = error
             else:
-                entry = self._get_reauth_entry()
-                unique_id = (
-                    health.instance_id or entry.unique_id or self._reauth_base_url
+                if connection is None:
+                    raise RuntimeError("Missing validated connection")
+                await self.async_set_unique_id(
+                    f"{connection['installationId']}:{connection['connectionId']}"
                 )
-                await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
-                    entry,
+                    self._get_reauth_entry(),
                     data_updates={CONF_API_TOKEN: user_input[CONF_API_TOKEN]},
                 )
-
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=REAUTH_SCHEMA,
+            data_schema=_schema(token_only=True),
             errors=errors,
         )
 
-    async def async_step_user(
+    async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Validate and create a Samvev config entry."""
+        """Move a server URL or rotate a token without replacing entity IDs."""
+        entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                base_url = normalize_base_url(user_input[CONF_BASE_URL])
-                client = SamvevClient(
-                    base_url,
-                    user_input[CONF_API_TOKEN],
-                    async_get_clientsession(self.hass),
-                    timeout=DEFAULT_REQUEST_TIMEOUT,
-                )
-                health = await client.async_health()
-            except ValueError:
-                errors["base"] = "invalid_url"
-            except SamvevAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except SamvevConnectionError:
-                errors["base"] = "cannot_connect"
-            except SamvevInvalidResponseError:
-                errors["base"] = "invalid_response"
-            except Exception:
-                _LOGGER.exception("Unexpected error while connecting to Samvev")
-                errors["base"] = "unknown"
+            base_url, connection, error = await self._validate(
+                user_input[CONF_BASE_URL], user_input[CONF_API_TOKEN]
+            )
+            if error:
+                errors["base"] = error
             else:
-                unique_id = health.instance_id or base_url
-                await self.async_set_unique_id(unique_id)
-                self._abort_if_unique_id_configured()
-                title = health.name or urlsplit(base_url).netloc
-                return self.async_create_entry(
-                    title=title,
-                    data={
+                if connection is None or base_url is None:
+                    raise RuntimeError("Missing validated connection")
+                await self.async_set_unique_id(
+                    f"{connection['installationId']}:{connection['connectionId']}"
+                )
+                self._abort_if_unique_id_mismatch()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={
                         CONF_BASE_URL: base_url,
                         CONF_API_TOKEN: user_input[CONF_API_TOKEN],
                     },
                 )
-
         return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_SCHEMA,
+            step_id="reconfigure",
+            data_schema=_schema(entry.data[CONF_BASE_URL]),
             errors=errors,
         )

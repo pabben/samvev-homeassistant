@@ -1,0 +1,9 @@
+# Alternative optional replacement. Install Week Planner Card separately.
+type: custom:week-planner-card
+title: I dag og i morgen
+calendars:
+  - entity: calendar.samvev_ha_samvev
+days: 2
+startingDay: today
+compact: false
+showLocation: true

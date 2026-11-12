@@ -1,8 +1,9 @@
-"""Generic Home Assistant actions exposed by the Samvev adapter."""
+"""Narrow message actions using the Samvev connection as actor."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import quote
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
@@ -10,167 +11,202 @@ from homeassistant.core import SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
+from .api import SamvevApiError, SamvevAuthenticationError, SamvevConflictError
+from .const import DOMAIN
+
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 
+    from .coordinator import SamvevDataUpdateCoordinator
     from .runtime import SamvevRuntimeData
 
-from .api import SamvevApiError, SamvevAuthenticationError
-from .const import (
-    ATTR_CONFIG_ENTRY_ID,
-    ATTR_CONTEXT,
-    ATTR_DATA,
-    ATTR_ENTITY_IDS,
-    ATTR_EVENT_TYPE,
-    ATTR_PROMPT,
-    DOMAIN,
-    SERVICE_ASK,
-    SERVICE_EVENT,
-)
+SERVICES = ("create_message", "update_message", "withdraw_message")
 
-ASK_SCHEMA = vol.Schema(
+AUDIENCE_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_PROMPT): vol.All(cv.string, vol.Length(min=1)),
-        vol.Optional(ATTR_CONTEXT): dict,
-        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required("household"): cv.boolean,
+        vol.Required("person_ids", default=list): [cv.string],
     }
 )
-
-EVENT_SCHEMA = vol.Schema(
+COMMON: dict[Any, Any] = {
+    vol.Optional("config_entry_id"): cv.string,
+    vol.Optional("request_key"): vol.All(cv.string, vol.Length(min=8, max=128)),
+}
+CREATE_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_EVENT_TYPE): vol.All(cv.string, vol.Length(min=1)),
-        vol.Optional(ATTR_DATA, default=dict): dict,
-        vol.Optional(ATTR_ENTITY_IDS, default=list): cv.entity_ids,
-        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        **COMMON,
+        vol.Required("body"): vol.All(cv.string, vol.Length(min=1, max=1000)),
+        vol.Required("expires_at"): cv.string,
+        vol.Required("audience"): AUDIENCE_SCHEMA,
+        vol.Optional("importance", default="normal"): vol.In(("normal", "attention")),
+        vol.Optional("publish_at"): cv.string,
+    }
+)
+UPDATE_SCHEMA = vol.Schema(
+    {
+        **COMMON,
+        vol.Required("message_id"): cv.string,
+        vol.Optional("expected_revision"): cv.positive_int,
+        vol.Optional("body"): vol.All(cv.string, vol.Length(min=1, max=1000)),
+        vol.Optional("expires_at"): cv.string,
+        vol.Optional("audience"): AUDIENCE_SCHEMA,
+        vol.Optional("importance"): vol.In(("normal", "attention")),
+        vol.Optional("publish_at"): cv.string,
+    }
+)
+WITHDRAW_SCHEMA = vol.Schema(
+    {
+        **COMMON,
+        vol.Required("message_id"): cv.string,
+        vol.Optional("expected_revision"): cv.positive_int,
     }
 )
 
 
 @callback
 def async_register_actions(hass: HomeAssistant) -> None:
-    """Register integration actions once for the HA process."""
-    if hass.services.has_service(DOMAIN, SERVICE_ASK):
-        return
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ASK,
-        _async_ask,
-        schema=ASK_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_EVENT,
-        _async_event,
-        schema=EVENT_SCHEMA,
-    )
+    """Register narrow message actions once per HA process."""
+    for name, handler, schema in (
+        ("create_message", _async_create_message, CREATE_SCHEMA),
+        ("update_message", _async_update_message, UPDATE_SCHEMA),
+        ("withdraw_message", _async_withdraw_message, WITHDRAW_SCHEMA),
+    ):
+        if not hass.services.has_service(DOMAIN, name):
+            hass.services.async_register(
+                DOMAIN,
+                name,
+                handler,
+                schema=schema,
+                supports_response=SupportsResponse.OPTIONAL,
+            )
 
 
-async def _async_ask(call: ServiceCall) -> ServiceResponse:
-    """Send a query and return Samvev's structured answer."""
-    runtime = _runtime_for_call(call.hass, call)
+@callback
+def async_unregister_actions(hass: HomeAssistant) -> None:
+    """Remove process-wide actions when the final entry unloads."""
+    for name in SERVICES:
+        hass.services.async_remove(DOMAIN, name)
+
+
+async def async_mutate(
+    coordinator: SamvevDataUpdateCoordinator,
+    method: str,
+    path: str,
+    payload: dict[str, Any],
+    request_key: str | None = None,
+) -> dict[str, Any]:
+    """Translate safe API errors after the coordinator handles refresh/retry."""
     try:
-        response = await runtime.client.async_ask(
-            call.data[ATTR_PROMPT], call.data.get(ATTR_CONTEXT)
+        return await coordinator.async_mutate(
+            method, path, payload, request_key=request_key
         )
-    except SamvevApiError as err:
-        raise _action_error(err) from err
-    result: dict[str, Any] = {"answer": response.answer}
-    if response.request_id is not None:
-        result["request_id"] = response.request_id
-    if response.data is not None:
-        result["data"] = response.data
-    return result
-
-
-async def _async_event(call: ServiceCall) -> None:
-    """Send one structured event plus explicitly selected HA states."""
-    runtime = _runtime_for_call(call.hass, call)
-    adapter_context = _selected_entity_context(call.hass, call.data[ATTR_ENTITY_IDS])
-    try:
-        response = await runtime.client.async_send_event(
-            call.data[ATTR_EVENT_TYPE],
-            dict(call.data[ATTR_DATA]),
-            adapter_context,
-        )
-    except SamvevApiError as err:
-        raise _action_error(err) from err
-    if not response.accepted:
+    except SamvevAuthenticationError as err:
         raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="event_rejected",
-        )
-    await runtime.coordinator.async_request_refresh()
+            translation_domain=DOMAIN, translation_key="action_invalid_auth"
+        ) from err
+    except SamvevConflictError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="conflict"
+        ) from err
+    except SamvevApiError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="action_failed"
+        ) from err
 
 
-def _selected_entity_context(
-    hass: HomeAssistant, entity_ids: list[str]
-) -> dict[str, Any] | None:
-    """Snapshot only the entities explicitly supplied to the action."""
-    if not entity_ids:
-        return None
-    snapshots: list[dict[str, str]] = []
-    missing: list[str] = []
-    for entity_id in entity_ids:
-        state = hass.states.get(entity_id)
-        if state is None:
-            missing.append(entity_id)
-            continue
-        snapshots.append(
-            {
-                "entity_id": entity_id,
-                "state": state.state,
-                "last_changed": state.last_changed.isoformat(),
-            }
+def _payload(data: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        target: data[source]
+        for source, target in (
+            ("body", "body"),
+            ("importance", "importance"),
+            ("publish_at", "publishAt"),
+            ("expires_at", "expiresAt"),
         )
-    if missing:
+        if source in data
+    }
+    if "audience" in data:
+        payload["audience"] = {
+            "household": data["audience"]["household"],
+            "personIds": data["audience"]["person_ids"],
+        }
+    return payload
+
+
+def _expected_revision(runtime: SamvevRuntimeData, data: dict[str, Any]) -> int:
+    if "expected_revision" in data:
+        return int(data["expected_revision"])
+    row = next(
+        (
+            row
+            for row in (runtime.coordinator.data or {}).get("messages", [])
+            if row["id"] == data["message_id"]
+        ),
+        None,
+    )
+    if row is None:
         raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="entities_not_found",
-            translation_placeholders={"entity_ids": ", ".join(missing)},
+            translation_domain=DOMAIN, translation_key="item_not_found"
         )
-    return {"entities": snapshots}
+    return int(row["revision"])
+
+
+async def _async_create_message(call: ServiceCall) -> ServiceResponse:
+    runtime = _runtime_for_call(call.hass, call)
+    return await async_mutate(
+        runtime.coordinator,
+        "POST",
+        "messages",
+        _payload(call.data),
+        call.data.get("request_key"),
+    )
+
+
+async def _async_update_message(call: ServiceCall) -> ServiceResponse:
+    runtime = _runtime_for_call(call.hass, call)
+    payload = _payload(call.data)
+    payload["expectedRevision"] = _expected_revision(runtime, call.data)
+    return await async_mutate(
+        runtime.coordinator,
+        "PATCH",
+        f"messages/{quote(call.data['message_id'], safe='')}",
+        payload,
+        call.data.get("request_key"),
+    )
+
+
+async def _async_withdraw_message(call: ServiceCall) -> ServiceResponse:
+    runtime = _runtime_for_call(call.hass, call)
+    return await async_mutate(
+        runtime.coordinator,
+        "POST",
+        f"messages/{quote(call.data['message_id'], safe='')}/withdraw",
+        {"expectedRevision": _expected_revision(runtime, call.data)},
+        call.data.get("request_key"),
+    )
 
 
 def _runtime_for_call(hass: HomeAssistant, call: ServiceCall) -> SamvevRuntimeData:
-    """Resolve the explicitly selected or sole loaded config entry."""
-    requested_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
-    if requested_id is not None:
-        candidate = hass.config_entries.async_get_entry(requested_id)
-        entries = [candidate] if candidate is not None else []
+    """Require unambiguous connection selection without impersonating HA users."""
+    requested = call.data.get("config_entry_id")
+    if requested:
+        candidate = hass.config_entries.async_get_entry(requested)
+        entries = [candidate] if candidate and candidate.domain == DOMAIN else []
     else:
         entries = [
             entry
             for entry in hass.config_entries.async_entries(DOMAIN)
             if entry.state is ConfigEntryState.LOADED
         ]
-
-    if len(entries) != 1 or entries[0].domain != DOMAIN:
-        translation_key = (
-            "entry_not_found"
-            if requested_id is not None or not entries
-            else "entry_required"
-        )
+    if len(entries) != 1:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
-            translation_key=translation_key,
+            translation_key="entry_required" if len(entries) > 1 else "entry_not_found",
         )
     entry = cast("ConfigEntry[SamvevRuntimeData]", entries[0])
     if entry.state is not ConfigEntryState.LOADED:
         raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="entry_not_loaded",
+            translation_domain=DOMAIN, translation_key="entry_not_loaded"
         )
     return entry.runtime_data
-
-
-def _action_error(err: SamvevApiError) -> HomeAssistantError:
-    """Convert client failures to safe, user-visible HA errors."""
-    key = (
-        "action_invalid_auth"
-        if isinstance(err, SamvevAuthenticationError)
-        else "action_failed"
-    )
-    return HomeAssistantError(translation_domain=DOMAIN, translation_key=key)

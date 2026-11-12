@@ -1,0 +1,26 @@
+[
+  {
+    "file": "narrow-dark.png",
+    "width": 390,
+    "height": 1664,
+    "sha256": "285c9d64fc6e711e44e51101722e4cd8bd723c5d6d5c7bff46e4b659762018b9"
+  },
+  {
+    "file": "narrow-light.png",
+    "width": 390,
+    "height": 1664,
+    "sha256": "0cebc3acc0fdd41c709a7d4153625a0ec179c82b6e7c7aa1a27840ce1277e930"
+  },
+  {
+    "file": "shelly-xl-dark.png",
+    "width": 1280,
+    "height": 763,
+    "sha256": "16dcf9e73e0196458da235a1a1a7057d29a9340e97140f651b9a9c4c3ec552e1"
+  },
+  {
+    "file": "shelly-xl-light.png",
+    "width": 1280,
+    "height": 763,
+    "sha256": "559e26d9725b65f20e198dca7f5e3676557596c98d6582bc8718f84c02b80156"
+  }
+]

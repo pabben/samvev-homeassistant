@@ -1,62 +1,121 @@
-ask:
-  name: Ask Samvev
-  description: Send a query to Samvev and return its structured answer.
+create_message:
+  name: Create message
+  description: Create a Samvev message as this connection, addressed only to its permitted audience. This never acknowledges a task or awards points.
   fields:
-    prompt:
-      name: Prompt
-      description: The question or instruction for Samvev.
+    config_entry_id:
+      name: Samvev connection
+      description: Required when more than one Samvev connection is loaded.
+      selector:
+        config_entry:
+          integration: samvev
+    body:
+      name: Message
       required: true
-      example: What needs attention tomorrow?
       selector:
         text:
           multiline: true
-    context:
-      name: Context
-      description: Optional structured context supplied explicitly with the query.
-      required: false
-      example:
-        channel: home
+    audience:
+      name: Audience
+      description: "An explicit subset of the household and person recipients permitted for this connection."
+      required: true
       selector:
         object:
-    config_entry_id:
-      name: Samvev connection
-      description: Required only when more than one Samvev connection is loaded.
-      required: false
+    importance:
+      name: Importance
+      default: normal
       selector:
-        config_entry:
-          integration: samvev
-
-event:
-  name: Send event to Samvev
-  description: Send a generic event and optional explicitly selected entity states.
-  fields:
-    event_type:
-      name: Event type
-      description: A stable, generic event type understood by Samvev Core.
-      required: true
-      example: household.context_changed
+        select:
+          translation_key: importance
+          options:
+            - normal
+            - attention
+    publish_at:
+      name: Publication time
+      description: Optional ISO timestamp including timezone; defaults to now.
       selector:
         text:
-    data:
-      name: Data
-      description: Structured event payload controlled by the caller.
-      required: false
-      example:
-        reason: automation
+    expires_at:
+      name: Expiry time
+      description: Required ISO timestamp including timezone, later than publication.
+      required: true
       selector:
-        object:
-    entity_ids:
-      name: Entities
-      description: Entities whose current state should be included explicitly.
-      required: false
+        text:
+    request_key:
+      name: Retry key
+      description: Optional stable 8–128 character key for retries of the same automation operation. Use a new key for a new message.
       selector:
-        entity:
-          multiple: true
+        text:
+update_message:
+  name: Update message
+  description: Update a message authored by this connection. Omitted revision uses the last observed message revision; conflicting edits fail visibly.
+  fields:
     config_entry_id:
       name: Samvev connection
-      description: Required only when more than one Samvev connection is loaded.
-      required: false
       selector:
         config_entry:
           integration: samvev
-
+    message_id:
+      name: Message ID
+      required: true
+      selector:
+        text:
+    expected_revision:
+      name: Observed revision
+      selector:
+        number:
+          min: 1
+          mode: box
+    body:
+      name: Message
+      selector:
+        text:
+          multiline: true
+    audience:
+      name: Audience
+      description: "An explicit subset of the household and person recipients permitted for this connection."
+      selector:
+        object:
+    importance:
+      name: Importance
+      selector:
+        select:
+          translation_key: importance
+          options:
+            - normal
+            - attention
+    publish_at:
+      name: Publication time
+      selector:
+        text:
+    expires_at:
+      name: Expiry time
+      selector:
+        text:
+    request_key:
+      name: Retry key
+      selector:
+        text:
+withdraw_message:
+  name: Withdraw message
+  description: Withdraw a message authored by this connection, without creating a read or completion receipt.
+  fields:
+    config_entry_id:
+      name: Samvev connection
+      selector:
+        config_entry:
+          integration: samvev
+    message_id:
+      name: Message ID
+      required: true
+      selector:
+        text:
+    expected_revision:
+      name: Observed revision
+      selector:
+        number:
+          min: 1
+          mode: box
+    request_key:
+      name: Retry key
+      selector:
+        text:

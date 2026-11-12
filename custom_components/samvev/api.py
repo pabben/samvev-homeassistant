@@ -1,91 +1,53 @@
-"""Async client for the provisional Samvev HTTP API.
-
-This module deliberately has no Home Assistant imports. It is the contract boundary
-between the adapter and Samvev Core and can be extracted into a separate package if
-the API stabilizes.
-"""
+"""Bounded asynchronous client for the versioned Samvev HA bridge API."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import re
+from datetime import date, datetime
 from http import HTTPStatus
-from typing import Any, Final, Literal, overload
-from urllib.parse import urlsplit, urlunsplit
+from typing import Any, Final
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
-API_PREFIX: Final = "api/v1"
+API_PREFIX: Final = "api/v1/ha"
+MAX_RESPONSE_BYTES: Final = 2 * 1024 * 1024
+MIN_REQUEST_KEY: Final = 8
+MAX_REQUEST_KEY: Final = 128
+_MUTATION_PATH = re.compile(
+    r"(?:lists/groceries/items(?:/[A-Za-z0-9_-]+)?|"
+    r"messages(?:/[A-Za-z0-9_-]+(?:/withdraw)?)?|"
+    r"calendars/samvev/events(?:/[A-Za-z0-9_-]+)?)\Z"
+)
 
 
 class SamvevApiError(Exception):
-    """Base exception for Samvev client errors."""
+    """Base exception containing no server response or credential."""
 
 
 class SamvevAuthenticationError(SamvevApiError):
-    """The API token was rejected."""
+    """The connection no longer has the required authorization."""
 
 
 class SamvevConnectionError(SamvevApiError):
-    """The Samvev server could not be reached."""
+    """The authoritative result could not be obtained; retry may be safe."""
 
 
 class SamvevInvalidResponseError(SamvevApiError):
-    """The server returned an invalid or unsupported response."""
+    """The response violates the supported bridge contract."""
 
 
-@dataclass(frozen=True, slots=True)
-class HealthStatus:
-    """Samvev server health information."""
-
-    status: str
-    instance_id: str | None = None
-    name: str | None = None
+class SamvevConflictError(SamvevApiError):
+    """Samvev rejected a stale revision or mismatched retry key."""
 
 
-@dataclass(frozen=True, slots=True)
-class AttentionItem:
-    """A structured attention item decided by Samvev Core."""
-
-    item_id: str | None
-    summary: str
-    due_at: str | None = None
-    kind: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ContextStatus:
-    """Small status projection exposed to adapter entities."""
-
-    status: str
-    next_attention: AttentionItem | None = None
-    attention_count: int | None = None
-
-    @classmethod
-    def without_context_endpoint(cls) -> ContextStatus:
-        """Return a compatible response for servers without context projection."""
-        return cls(status="connected")
-
-
-@dataclass(frozen=True, slots=True)
-class AskResponse:
-    """Response to a Samvev query."""
-
-    answer: str
-    request_id: str | None = None
-    data: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class EventResponse:
-    """Acknowledgement from Samvev for an incoming event."""
-
-    accepted: bool
-    event_id: str | None = None
+class SamvevRequestError(SamvevApiError):
+    """Samvev definitively rejected a request."""
 
 
 class SamvevClient:
-    """Small asynchronous client for Samvev Core."""
+    """HTTP transport; HA owns its session and Samvev owns all content."""
 
     __slots__ = ("_base_url", "_session", "_timeout", "_token")
 
@@ -97,7 +59,7 @@ class SamvevClient:
         *,
         timeout: float = 10.0,
     ) -> None:
-        """Initialize the client without taking ownership of the HTTP session."""
+        """Initialize without taking ownership of the HTTP session."""
         self._base_url = normalize_base_url(base_url)
         self._token = api_token
         self._session = session
@@ -105,218 +67,264 @@ class SamvevClient:
 
     @property
     def base_url(self) -> str:
-        """Return the normalized, non-secret base URL."""
+        """Return the normalized URL without credentials."""
         return self._base_url
 
     def __repr__(self) -> str:
-        """Return a representation that never includes credentials."""
-        return f"{type(self).__name__}(base_url={self._base_url!r})"
+        """Exclude the secret and the potentially private server address."""
+        return f"{type(self).__name__}()"
 
-    async def async_health(self) -> HealthStatus:
-        """Fetch and validate server health."""
-        payload = await self._request("GET", "health")
-        status = _required_string(payload, "status")
-        if status not in {"ok", "healthy"}:
-            raise SamvevInvalidResponseError("Samvev reported an unhealthy status")
-        return HealthStatus(
-            status=status,
-            instance_id=_optional_string(payload, "instance_id"),
-            name=_optional_string(payload, "name"),
-        )
+    async def async_connection(self) -> dict[str, Any]:
+        """Authenticate and validate the stable connection and its authority."""
+        payload = await self._request("GET", "connection")
+        _validate_connection(payload)
+        return payload
 
-    async def async_get_context(self) -> ContextStatus:
-        """Fetch the small, precomputed context projection used by HA entities."""
-        payload = await self._request("GET", "context", allow_not_found=True)
-        if payload is None:
-            return ContextStatus.without_context_endpoint()
+    async def async_snapshot(self) -> dict[str, Any]:
+        """Read the complete authoritative current, permitted projection."""
+        payload = await self._request("GET", "snapshot")
+        _validate_connection(payload)
+        _instant(payload, "serverNow")
+        for listing in _objects(payload, "lists"):
+            _string(listing, "id")
+            _string(listing, "name")
+            _boolean(listing, "writable")
+            for item in _objects(listing, "items"):
+                _string(item, "id")
+                _string(item, "label")
+                _boolean(item, "checked")
+                _revision(item)
+        for message in _objects(payload, "messages"):
+            for field in (
+                "id",
+                "body",
+                "authorName",
+                "authorType",
+                "importance",
+                "state",
+            ):
+                _string(message, field)
+            _instant(message, "publishAt")
+            _instant(message, "expiresAt")
+            _revision(message)
+            audience = message.get("audience")
+            if not isinstance(audience, dict):
+                raise SamvevInvalidResponseError("Invalid message audience")
+            _boolean(audience, "household")
+            _strings(audience, "personIds")
+        for calendar in _objects(payload, "calendars"):
+            _string(calendar, "id")
+            _string(calendar, "name")
+            _boolean(calendar, "writable")
+        return payload
 
-        attention_payload = payload.get("next_attention")
-        next_attention: AttentionItem | None = None
-        if attention_payload is not None:
-            if not isinstance(attention_payload, dict):
-                raise SamvevInvalidResponseError(
-                    "Field 'next_attention' must be an object or null"
-                )
-            next_attention = AttentionItem(
-                item_id=_optional_string(attention_payload, "id"),
-                summary=_required_string(attention_payload, "summary"),
-                due_at=_optional_string(attention_payload, "due_at"),
-                kind=_optional_string(attention_payload, "kind"),
-            )
-
-        attention_count = payload.get("attention_count")
-        if attention_count is not None and (
-            not isinstance(attention_count, int) or isinstance(attention_count, bool)
-        ):
-            raise SamvevInvalidResponseError(
-                "Field 'attention_count' must be an integer or null"
-            )
-        if isinstance(attention_count, int) and attention_count < 0:
-            raise SamvevInvalidResponseError(
-                "Field 'attention_count' must not be negative"
-            )
-
-        status = payload.get("status", "connected")
-        if not isinstance(status, str) or not status:
-            raise SamvevInvalidResponseError("Field 'status' must be a string")
-        return ContextStatus(status, next_attention, attention_count)
-
-    async def async_ask(
-        self, prompt: str, context: dict[str, Any] | None = None
-    ) -> AskResponse:
-        """Send a query to Samvev and return its structured response."""
-        request: dict[str, Any] = {"prompt": prompt}
-        if context is not None:
-            request["context"] = context
-        payload = await self._request("POST", "ask", json_body=request)
-        return AskResponse(
-            answer=_required_string(payload, "answer"),
-            request_id=_optional_string(payload, "request_id"),
-            data=_optional_object(payload, "data"),
-        )
-
-    async def async_send_event(
-        self,
-        event_type: str,
-        data: dict[str, Any],
-        context: dict[str, Any] | None = None,
-    ) -> EventResponse:
-        """Send structured adapter input to Samvev."""
-        request: dict[str, Any] = {
-            "type": event_type,
-            "data": data,
-            "source": "home_assistant",
-        }
-        if context is not None:
-            request["context"] = context
+    async def async_events(
+        self, calendar_id: str, start: datetime, end: datetime
+    ) -> dict[str, Any]:
+        """Read every permitted event in a requested bounded interval."""
+        if start.tzinfo is None or end.tzinfo is None or end <= start:
+            raise ValueError("An aware increasing calendar interval is required")
+        query = urlencode({"start": start.isoformat(), "end": end.isoformat()})
         payload = await self._request(
-            "POST",
-            "events",
-            json_body=request,
+            "GET", f"calendars/{quote(calendar_id, safe='')}/events?{query}"
         )
-        accepted = payload.get("accepted")
-        if not isinstance(accepted, bool):
-            raise SamvevInvalidResponseError("Field 'accepted' must be a boolean")
-        return EventResponse(
-            accepted=accepted,
-            event_id=_optional_string(payload, "event_id"),
+        for event in _objects(payload, "events"):
+            _validate_event(event)
+        _instant(payload, "serverNow")
+        return payload
+
+    async def async_mutate(
+        self, method: str, endpoint: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Send an idempotent mutation with the caller's durable request key."""
+        if method not in {"POST", "PATCH", "DELETE"} or not _MUTATION_PATH.fullmatch(
+            endpoint
+        ):
+            raise ValueError("Unsupported Samvev mutation")
+        key = payload.get("requestKey")
+        if (
+            not isinstance(key, str)
+            or not MIN_REQUEST_KEY <= len(key) <= MAX_REQUEST_KEY
+        ):
+            raise ValueError("A stable requestKey is required")
+        result = await self._request(method, endpoint, json_body=payload)
+        field = (
+            "message"
+            if endpoint.startswith("messages")
+            else "event"
+            if endpoint.startswith("calendars")
+            else "item"
         )
-
-    @overload
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        *,
-        json_body: dict[str, Any] | None = None,
-        allow_not_found: Literal[False] = False,
-    ) -> dict[str, Any]: ...
-
-    @overload
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        *,
-        json_body: dict[str, Any] | None = None,
-        allow_not_found: Literal[True],
-    ) -> dict[str, Any] | None: ...
+        resource = result.get(field)
+        if not isinstance(resource, dict):
+            raise SamvevInvalidResponseError("Missing authoritative mutation result")
+        _string(resource, "id")
+        _revision(resource)
+        return result
 
     async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        *,
-        json_body: dict[str, Any] | None = None,
-        allow_not_found: bool = False,
-    ) -> dict[str, Any] | None:
-        """Make one authenticated JSON request without exposing response bodies."""
+        self, method: str, endpoint: str, *, json_body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Make one bounded request; never redirect or expose response bodies."""
         url = f"{self._base_url}/{API_PREFIX}/{endpoint}"
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self._token}",
-        }
         try:
             async with self._session.request(
                 method,
                 url,
-                headers=headers,
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {self._token}",
+                },
                 json=json_body,
                 timeout=self._timeout,
+                allow_redirects=False,
             ) as response:
-                if response.status in {
-                    HTTPStatus.UNAUTHORIZED,
-                    HTTPStatus.FORBIDDEN,
-                }:
-                    raise SamvevAuthenticationError("Samvev rejected the API token")
-                if allow_not_found and response.status == HTTPStatus.NOT_FOUND:
-                    return None
-                if not (HTTPStatus.OK <= response.status < HTTPStatus.MULTIPLE_CHOICES):
-                    raise SamvevConnectionError(
-                        f"Samvev request failed with HTTP {response.status}"
-                    )
+                if response.status in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+                    raise SamvevAuthenticationError("Samvev authorization rejected")
+                if response.status == HTTPStatus.CONFLICT:
+                    raise SamvevConflictError("Samvev revision or retry conflict")
+                if (
+                    response.status >= HTTPStatus.INTERNAL_SERVER_ERROR
+                    or response.status == HTTPStatus.TOO_MANY_REQUESTS
+                ):
+                    raise SamvevConnectionError("Samvev temporarily unavailable")
+                if not HTTPStatus.OK <= response.status < HTTPStatus.MULTIPLE_CHOICES:
+                    raise SamvevRequestError("Samvev request rejected")
                 return await _read_json_object(response)
         except SamvevApiError:
             raise
-        except (TimeoutError, ClientError) as err:
-            raise SamvevConnectionError("Unable to reach the Samvev server") from err
+        except (TimeoutError, ClientError):
+            raise SamvevConnectionError("Unable to reach Samvev") from None
 
 
 def normalize_base_url(base_url: str) -> str:
-    """Validate and normalize a Samvev base URL."""
+    """Validate an HTTP(S) deployment root without embedded credentials."""
     if not isinstance(base_url, str) or not (candidate := base_url.strip()):
         raise ValueError("Base URL is required")
-    candidate = candidate.rstrip("/")
-    parsed = urlsplit(candidate)
+    parsed = urlsplit(candidate.rstrip("/"))
     if (
         parsed.scheme.lower() not in {"http", "https"}
-        or not parsed.netloc
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
+        or any(char.isspace() or not char.isprintable() for char in candidate)
+        or "\\" in candidate
     ):
-        raise ValueError("Base URL must be an HTTP(S) URL without credentials")
+        raise ValueError("Base URL must be HTTP(S) without credentials")
     try:
         _ = parsed.port
     except ValueError as err:
         raise ValueError("Base URL has an invalid port") from err
-    normalized_path = parsed.path.rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc, normalized_path, "", ""))
+    return urlunsplit(
+        (parsed.scheme.lower(), parsed.netloc, parsed.path.rstrip("/"), "", "")
+    )
 
 
 async def _read_json_object(response: ClientResponse) -> dict[str, Any]:
-    """Decode a response and require a JSON object."""
+    """Read a bounded body before decoding, including streamed responses."""
+    if (
+        response.content_length is not None
+        and response.content_length > MAX_RESPONSE_BYTES
+    ):
+        raise SamvevInvalidResponseError("Samvev response too large")
+    body = bytearray()
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        body.extend(chunk)
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise SamvevInvalidResponseError("Samvev response too large")
     try:
-        payload = await response.json(content_type=None)
+        payload = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError) as err:
         raise SamvevInvalidResponseError("Samvev returned malformed JSON") from err
     if not isinstance(payload, dict):
-        raise SamvevInvalidResponseError("Samvev response must be a JSON object")
+        raise SamvevInvalidResponseError("Samvev response must be an object")
     return payload
 
 
-def _required_string(payload: dict[str, Any], key: str) -> str:
+def _string(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
-        raise SamvevInvalidResponseError(f"Field {key!r} must be a non-empty string")
+        raise SamvevInvalidResponseError("Invalid string field")
     return value
 
 
-def _optional_string(payload: dict[str, Any], key: str) -> str | None:
+def _boolean(payload: dict[str, Any], key: str) -> None:
+    if not isinstance(payload.get(key), bool):
+        raise SamvevInvalidResponseError("Invalid boolean field")
+
+
+def _revision(payload: dict[str, Any], key: str = "revision", minimum: int = 1) -> None:
     value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise SamvevInvalidResponseError(f"Field {key!r} must be a string or null")
-    return value
+    if type(value) is not int or value < minimum:
+        raise SamvevInvalidResponseError("Invalid revision")
 
 
-def _optional_object(payload: dict[str, Any], key: str) -> dict[str, Any] | None:
+def _strings(payload: dict[str, Any], key: str) -> None:
     value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, dict):
-        raise SamvevInvalidResponseError(f"Field {key!r} must be an object or null")
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
+        raise SamvevInvalidResponseError("Invalid string collection")
+
+
+def _objects(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    value = payload.get(key)
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise SamvevInvalidResponseError("Invalid object collection")
     return value
+
+
+def _instant(payload: dict[str, Any], key: str) -> None:
+    try:
+        value = datetime.fromisoformat(_string(payload, key))
+    except ValueError as err:
+        raise SamvevInvalidResponseError("Invalid timestamp") from err
+    if value.tzinfo is None:
+        raise SamvevInvalidResponseError("Timestamp must contain a timezone")
+
+
+def _validate_connection(payload: dict[str, Any]) -> None:
+    if type(payload.get("schemaVersion")) is not int or payload["schemaVersion"] != 1:
+        raise SamvevInvalidResponseError("Unsupported Samvev bridge version")
+    for field in ("installationId", "connectionId", "householdId", "name", "timezone"):
+        _string(payload, field)
+    _strings(payload, "capabilities")
+    grants = payload.get("grants")
+    if not isinstance(grants, dict):
+        raise SamvevInvalidResponseError("Missing explicit sharing grants")
+    _revision(grants, minimum=0)
+    _boolean(grants, "household")
+    for key in ("listIds", "personIds", "calendarSourceIds"):
+        _strings(grants, key)
+
+
+def _validate_event(event: dict[str, Any]) -> None:
+    """Reject malformed dates and mixed all-day/timed events before caching."""
+    for key in ("id", "summary", "source"):
+        _string(event, key)
+    _revision(event)
+    _boolean(event, "readOnly")
+    for key in ("description", "location"):
+        if event.get(key) is not None and not isinstance(event[key], str):
+            raise SamvevInvalidResponseError("Invalid event details")
+    start_text, end_text = _string(event, "start"), _string(event, "end")
+    try:
+        start: date | datetime
+        end: date | datetime
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", start_text) and re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}", end_text
+        ):
+            start, end = date.fromisoformat(start_text), date.fromisoformat(end_text)
+        else:
+            start, end = (
+                datetime.fromisoformat(start_text),
+                datetime.fromisoformat(end_text),
+            )
+            if start.tzinfo is None or end.tzinfo is None:
+                raise ValueError("Timezone required")  # noqa: TRY301
+        if end <= start:
+            raise ValueError("Invalid interval")  # noqa: TRY301
+    except (TypeError, ValueError):
+        raise SamvevInvalidResponseError("Invalid event interval") from None

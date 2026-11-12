@@ -27,3 +27,8 @@ build/
 .idea/
 .vscode/
 .DS_Store
+
+# Local tools and integration-test receipts
+.tools/
+.local/
+coverage.xml

@@ -1,0 +1,160 @@
+[
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 752
+    },
+    "dark": false,
+    "bootstrapErrors": [
+      {
+        "kind": "error",
+        "value": "null"
+      }
+    ],
+    "darkMode": false,
+    "checkboxes": [
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      }
+    ],
+    "horizontalOverflow": false,
+    "errors": []
+  },
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 752
+    },
+    "dark": true,
+    "bootstrapErrors": [
+      {
+        "kind": "error",
+        "value": "null"
+      }
+    ],
+    "darkMode": true,
+    "checkboxes": [
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 296.65625,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      }
+    ],
+    "horizontalOverflow": false,
+    "errors": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "dark": false,
+    "bootstrapErrors": [],
+    "darkMode": false,
+    "checkboxes": [
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      }
+    ],
+    "horizontalOverflow": false,
+    "errors": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "dark": true,
+    "bootstrapErrors": [],
+    "darkMode": true,
+    "checkboxes": [
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      },
+      {
+        "width": 372,
+        "height": 56
+      },
+      {
+        "width": 40,
+        "height": 40
+      }
+    ],
+    "horizontalOverflow": false,
+    "errors": []
+  }
+]

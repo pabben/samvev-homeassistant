@@ -1,0 +1,64 @@
+name: Validate integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy custom_components/samvev
+      - run: uv run pytest
+      - run: uv run python scripts/package_integration.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: samvev-homeassistant
+          path: dist/samvev-homeassistant-*.zip
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands
+  actual-samvev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: pabben/samvev
+          ref: c457a824d46c8624e922346de637e4e2633c1329
+          path: .local/samvev
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Build and start the synthetic Samvev fixture
+        working-directory: .local/samvev
+        run: |
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml build ha-bridge-api
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml up -d ha-bridge-api
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4193/api/v1/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Test actual HA entities against actual Samvev HTTP
+        env:
+          SAMVEV_REAL_URL: http://127.0.0.1:4193
+        run: uv run pytest tests/test_roundtrip.py --no-cov
+      - name: Remove only the isolated test resources
+        if: always()
+        working-directory: .local/samvev
+        run: |
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml rm --stop --force ha-bridge-api ha-bridge-check ha-bridge-db
+          docker network rm samvev-m1-ha-bridge-isolated || true

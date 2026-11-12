@@ -1,0 +1,82 @@
+title: Samvev
+views:
+  - title: Hjem
+    path: hjem
+    icon: mdi:home-heart
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Handleliste
+            icon: mdi:cart-outline
+          - type: todo-list
+            entity: todo.samvev_ha_groceries
+            title: Felles handleliste
+            hide_completed: false
+      - type: grid
+        cards:
+          - type: heading
+            heading: Beskjeder
+            icon: mdi:message-text-outline
+          - type: markdown
+            title: Aktuelle beskjeder
+            entity_id: sensor.samvev_ha_messages
+            content: |-
+              {% set entity = 'sensor.samvev_ha_messages' %}
+              {% if states(entity) in ['unavailable', 'unknown'] %}
+              **Forbindelsen er utilgjengelig.** Siste informasjon er utdatert.
+              {% endif %}
+              {% for message in state_attr(entity, 'messages') or [] %}
+
+              **{{ message.authorName | e }}**
+              {% if message.importance == 'attention' %} · **Viktig**{% endif %}
+
+              {{ message.body | e }}
+
+              <small>Utløper {{ as_timestamp(message.expiresAt) | timestamp_custom('%d.%m. %H:%M') }}</small>
+
+              ---
+              {% else %}
+              Ingen aktive beskjeder delt med denne forbindelsen.
+              {% endfor %}
+          - type: entities
+            title: Tilkobling og oppdatering
+            show_header_toggle: false
+            entities:
+              - entity: sensor.samvev_ha_connection_status
+                name: Samvev-forbindelse
+              - entity: sensor.samvev_ha_last_success
+                name: Sist hentet
+      - type: grid
+        cards:
+          - type: heading
+            heading: Dagens og morgendagens plan
+            icon: mdi:calendar-clock
+          - type: markdown
+            title: I dag og i morgen
+            entity_id: calendar.samvev_ha_samvev
+            content: |-
+              {% set entity = 'calendar.samvev_ha_samvev' %}
+              {% if states(entity) in ['unavailable', 'unknown'] %}
+              **Kalenderen er utilgjengelig.** Eventuell lagret plan er utdatert.
+              {% elif state_attr(entity, 'stale') %}
+              **Kildens innhold er utdatert.**
+              {% endif %}
+              {% for day in state_attr(entity, 'agenda') or [] %}
+
+              ### {{ 'I dag' if loop.first else 'I morgen' }} · {{ day.date }}
+
+              {% for event in day.events %}
+              **{% if event.allDay %}Hele dagen{% else %}{{ as_timestamp(event.start) | timestamp_custom('%H:%M') }}{% endif %}**
+              {{ event.summary | e }}{% if event.location %} · {{ event.location | e }}{% endif %}
+
+              {% else %}
+              Ingen delte avtaler denne dagen.
+              {% endfor %}
+              {% else %}
+              Ingen oppdatert, delt plan er tilgjengelig.
+              {% endfor %}
+            # For several calendars, add another native Markdown/calendar card
+            # or use one of the optional two-day card examples with all entities.
