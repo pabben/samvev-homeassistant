@@ -15,10 +15,13 @@ Backend migration 047 extends allowed integration capabilities, adds explicit
 sharing and durable operation receipts, and supports an integration message/board
 actor. Existing credential meanings and earlier migration checksums are retained.
 The native calendar uses Samvev's existing item model, not a parallel calendar
-server. For rollback, revoke the new connection and disable/remove the HA adapter;
+server. For an HA-adapter rollback, revoke the new connection and disable/remove it;
 retain the additive schema and authored data. Do not run a destructive down
 migration or restore a database over newer writes. A full schema rollback needs
 a separately verified backup and the normal Samvev recovery procedure.
+An older backend image is not automatically compatible with integration-authored
+messages and native all-day events. Backend image rollback is not validated here;
+prefer forward recovery or prepare and test a separate compatibility/data plan.
 
 ## Install the custom component
 

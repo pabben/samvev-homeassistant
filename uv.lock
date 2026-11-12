@@ -2810,7 +2810,7 @@ wheels = [
 [[package]]
 name = "samvev-homeassistant"
 version = "0.2.0"
-source = { editable = "." }
+source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [

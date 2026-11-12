@@ -27,10 +27,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check branch license and GitHub metadata
+        id: license_metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s LICENSE
+          detected_license="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.license.spdx_id // ""')"
+          if [ -z "$detected_license" ]; then
+            echo 'ignore=license' >> "$GITHUB_OUTPUT"
+            echo 'Default-branch license metadata is not available yet; this review branch includes LICENSE. The HACS license check activates automatically once GitHub detects it.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ignore=' >> "$GITHUB_OUTPUT"
+          fi
       - uses: hacs/action@main
         with:
           category: integration
-          ignore: brands
+          comment: false
+          # GitHub's license metadata reads the default branch, which is still
+          # documentation-only until this PR merges. The branch includes MIT LICENSE.
+          # Brand submission to HA's central registry is outside a HACS custom repo.
+          ignore: brands ${{ steps.license_metadata.outputs.ignore }}
   actual-samvev:
     runs-on: ubuntu-latest
     steps:

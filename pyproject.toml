@@ -24,6 +24,11 @@ dev = [
   "ruff==0.16.6",
 ]
 
+[tool.uv]
+# HA loads custom_components from disk; setuptools namespace path hooks are
+# not valid filesystem directories for HA's custom-integration discovery.
+package = false
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config --cov=custom_components.samvev --cov-report=term-missing"
 asyncio_mode = "auto"
