@@ -1,11 +1,29 @@
-.coverage
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.tools/
-.venv/
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+secrets.yaml
+.storage/
+config/
+*.pem
+*.key
+
+# Python and test output
 __pycache__/
-*.egg-info/
 *.py[cod]
-coverage.xml
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
 htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Editor / operating system
+.idea/
+.vscode/
+.DS_Store
