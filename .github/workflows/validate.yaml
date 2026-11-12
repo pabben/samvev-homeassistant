@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: pabben/samvev
-          ref: c457a824d46c8624e922346de637e4e2633c1329
+          ref: 5aae5e0719bea79edbc4bcdd6a174d2664b95388
           path: .local/samvev
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen

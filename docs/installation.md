@@ -4,7 +4,7 @@
 
 Install the companion Samvev backend change implementing HA bridge v1 first.
 The reference baseline is `feat/m3-family-hub` at `a298203`; the bridge change is
-on `feat/native-ha-bridge`, commit `c457a824d46c8624e922346de637e4e2633c1329`,
+on `feat/native-ha-bridge`, commit `5aae5e0719bea79edbc4bcdd6a174d2664b95388`,
 and adds migration `047_home_assistant_bridge.sql`.
 See the [backend protocol](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md).
 This development work does not deploy it into an existing installation. Follow

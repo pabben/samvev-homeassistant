@@ -1,6 +1,6 @@
 # Verification evidence — 2026-11-12
 
-Backend reference: `c457a824d46c8624e922346de637e4e2633c1329`.
+Backend reference: `5aae5e0719bea79edbc4bcdd6a174d2664b95388`.
 
 The main agent reviewed the implementation, ran actual-server roundtrips and
 workspace checks, and inspected the rendered dashboard. Independent agents
@@ -13,7 +13,7 @@ modified. No secret or private family data is included in this repository.
 
 | Check | Result |
 |---|---|
-| Full Samvev API suite in separate temporary PostgreSQL | **490 passed; 0 failed; 0 skipped** |
+| Full Samvev API suite in separate temporary PostgreSQL | **493 passed; 0 failed; 0 skipped** |
 | HA integration suite, actual HA2026.2.3 harness | **74 passed; 3 opt-in real-server tests skipped in this command** |
 | Those three real-server interoperability tests, run separately | **3 passed**, actual Samvev code + actual HA entities/actions, no mocked transport |
 | HA branch coverage | **93.92%**, above the85% gate |
@@ -46,6 +46,12 @@ reading resource responses; calendar writes retaining removed recipients; replay
 under changed audiences/display targets; unnecessary manager inspection fields;
 and a delayed HA calendar response re-exposing content after narrower sharing.
 The latter has explicit private-payload race regression tests.
+
+GitHub CI also runs hassfest, HACS validation, the complete HA suite and actual
+cross-repository roundtrips. Brand-registry submission is outside custom-repository
+scope. GitHub's default-branch license metadata check is deferred only while that
+metadata is absent; the branch includes MIT LICENSE and the check activates
+automatically after GitHub detects it. Repository topics are configured.
 
 ## Actual update measurement
 
