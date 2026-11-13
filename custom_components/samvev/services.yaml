@@ -1,0 +1,121 @@
+create_message:
+  name: Create message
+  description: Create a Samvev message as this connection, addressed only to its permitted audience. This never acknowledges a task or awards points.
+  fields:
+    config_entry_id:
+      name: Samvev connection
+      description: Required when more than one Samvev connection is loaded.
+      selector:
+        config_entry:
+          integration: samvev
+    body:
+      name: Message
+      required: true
+      selector:
+        text:
+          multiline: true
+    audience:
+      name: Audience
+      description: "An explicit subset of the household and person recipients permitted for this connection."
+      required: true
+      selector:
+        object:
+    importance:
+      name: Importance
+      default: normal
+      selector:
+        select:
+          translation_key: importance
+          options:
+            - normal
+            - attention
+    publish_at:
+      name: Publication time
+      description: Optional ISO timestamp including timezone; defaults to now.
+      selector:
+        text:
+    expires_at:
+      name: Expiry time
+      description: Required ISO timestamp including timezone, later than publication.
+      required: true
+      selector:
+        text:
+    request_key:
+      name: Retry key
+      description: Optional stable 8–128 character key for retries of the same automation operation. Use a new key for a new message.
+      selector:
+        text:
+update_message:
+  name: Update message
+  description: Update a message authored by this connection. Omitted revision uses the last observed message revision; conflicting edits fail visibly.
+  fields:
+    config_entry_id:
+      name: Samvev connection
+      selector:
+        config_entry:
+          integration: samvev
+    message_id:
+      name: Message ID
+      required: true
+      selector:
+        text:
+    expected_revision:
+      name: Observed revision
+      selector:
+        number:
+          min: 1
+          mode: box
+    body:
+      name: Message
+      selector:
+        text:
+          multiline: true
+    audience:
+      name: Audience
+      description: "An explicit subset of the household and person recipients permitted for this connection."
+      selector:
+        object:
+    importance:
+      name: Importance
+      selector:
+        select:
+          translation_key: importance
+          options:
+            - normal
+            - attention
+    publish_at:
+      name: Publication time
+      selector:
+        text:
+    expires_at:
+      name: Expiry time
+      selector:
+        text:
+    request_key:
+      name: Retry key
+      selector:
+        text:
+withdraw_message:
+  name: Withdraw message
+  description: Withdraw a message authored by this connection, without creating a read or completion receipt.
+  fields:
+    config_entry_id:
+      name: Samvev connection
+      selector:
+        config_entry:
+          integration: samvev
+    message_id:
+      name: Message ID
+      required: true
+      selector:
+        text:
+    expected_revision:
+      name: Observed revision
+      selector:
+        number:
+          min: 1
+          mode: box
+    request_key:
+      name: Retry key
+      selector:
+        text:

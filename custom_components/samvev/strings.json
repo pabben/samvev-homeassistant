@@ -1,0 +1,199 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This Samvev connection is already configured.",
+      "reauth_successful": "Reauthentication was successful.",
+      "wrong_account": "The token belongs to a different Samvev connection.",
+      "reconfigure_successful": "Connection updated successfully.",
+      "unique_id_mismatch": "The token belongs to a different Samvev connection."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Samvev.",
+      "invalid_auth": "The API token was rejected.",
+      "invalid_response": "Samvev returned an unsupported response.",
+      "invalid_url": "Enter a valid HTTP or HTTPS base URL without credentials.",
+      "unknown": "Unexpected error."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_token": "API token"
+        },
+        "data_description": {
+          "api_token": "Replacement token for this Samvev server."
+        },
+        "description": "The API token was rejected. Enter a new token to reconnect.",
+        "title": "Reauthenticate Samvev"
+      },
+      "user": {
+        "data": {
+          "api_token": "API token",
+          "base_url": "Server URL"
+        },
+        "data_description": {
+          "api_token": "Token used only for authenticated requests to Samvev.",
+          "base_url": "Base URL of the Samvev server."
+        },
+        "description": "Connect Home Assistant to a Samvev server.",
+        "title": "Connect to Samvev"
+      },
+      "reconfigure": {
+        "title": "Reconfigure Samvev",
+        "description": "Enter the URL and a token for the same Samvev connection.",
+        "data": {
+          "base_url": "Server URL",
+          "api_token": "Connection token"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "messages": {
+        "name": "Active messages"
+      },
+      "connection_status": {
+        "name": "Connection status",
+        "state": {
+          "connected": "Connected",
+          "disconnected": "Disconnected"
+        }
+      },
+      "last_success": {
+        "name": "Last successful update"
+      }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "The request to Samvev failed."
+    },
+    "action_invalid_auth": {
+      "message": "Samvev rejected authorization. Reauthorize the connection."
+    },
+    "conflict": {
+      "message": "The content changed. Refresh and review before retrying."
+    },
+    "item_not_found": {
+      "message": "The item is not available."
+    },
+    "event_not_cached": {
+      "message": "Fetch the calendar interval before editing the event."
+    },
+    "read_only": {
+      "message": "This source is read-only."
+    },
+    "unsupported_recurrence": {
+      "message": "Creating recurring events is not supported."
+    },
+    "invalid_event": {
+      "message": "The event has invalid fields or times."
+    },
+    "entry_required": {
+      "message": "Select a Samvev connection."
+    },
+    "entry_not_found": {
+      "message": "The Samvev connection was not found."
+    },
+    "entry_not_loaded": {
+      "message": "The Samvev connection is not loaded."
+    },
+    "target_required": {
+      "message": "Select at least one permitted audience."
+    }
+  },
+  "services": {
+    "create_message": {
+      "name": "Create message",
+      "description": "Create a Samvev message as this connection, addressed only to its permitted audience. This never acknowledges a task or awards points.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev connection",
+          "description": "Required when more than one Samvev connection is loaded."
+        },
+        "body": {
+          "name": "Message"
+        },
+        "audience": {
+          "name": "Audience",
+          "description": "An explicit subset of the household and person recipients permitted for this connection."
+        },
+        "importance": {
+          "name": "Importance"
+        },
+        "publish_at": {
+          "name": "Publication time",
+          "description": "Optional ISO timestamp including timezone; defaults to now."
+        },
+        "expires_at": {
+          "name": "Expiry time",
+          "description": "Required ISO timestamp including timezone, later than publication."
+        },
+        "request_key": {
+          "name": "Retry key",
+          "description": "Optional stable 8–128 character key for retries of the same automation operation. Use a new key for a new message."
+        }
+      }
+    },
+    "update_message": {
+      "name": "Update message",
+      "description": "Update a message authored by this connection. Omitted revision uses the last observed message revision; conflicting edits fail visibly.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev connection"
+        },
+        "message_id": {
+          "name": "Message ID"
+        },
+        "expected_revision": {
+          "name": "Observed revision"
+        },
+        "body": {
+          "name": "Message"
+        },
+        "audience": {
+          "name": "Audience",
+          "description": "An explicit subset of the household and person recipients permitted for this connection."
+        },
+        "importance": {
+          "name": "Importance"
+        },
+        "publish_at": {
+          "name": "Publication time"
+        },
+        "expires_at": {
+          "name": "Expiry time"
+        },
+        "request_key": {
+          "name": "Retry key"
+        }
+      }
+    },
+    "withdraw_message": {
+      "name": "Withdraw message",
+      "description": "Withdraw a message authored by this connection, without creating a read or completion receipt.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev connection"
+        },
+        "message_id": {
+          "name": "Message ID"
+        },
+        "expected_revision": {
+          "name": "Observed revision"
+        },
+        "request_key": {
+          "name": "Retry key"
+        }
+      }
+    }
+  },
+  "selector": {
+    "importance": {
+      "options": {
+        "normal": "Normal",
+        "attention": "Attention"
+      }
+    }
+  }
+}

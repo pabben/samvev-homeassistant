@@ -1,0 +1,207 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Denne Samvev-forbindelsen er allerede konfigurert.",
+      "reauth_successful": "Ny autentisering var vellykket.",
+      "wrong_account": "Nøkkelen tilhører en annen Samvev-forbindelse.",
+      "reconfigure_successful": "Forbindelsen ble oppdatert.",
+      "unique_id_mismatch": "Nøkkelen tilhører en annen Samvev-forbindelse."
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke koble til Samvev.",
+      "invalid_auth": "API-tokenet ble avvist.",
+      "invalid_response": "Samvev returnerte et svar som ikke støttes.",
+      "invalid_url": "Oppgi en gyldig HTTP- eller HTTPS-adresse uten innloggingsinformasjon.",
+      "unknown": "Uventet feil."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_token": "API-token"
+        },
+        "data_description": {
+          "api_token": "Nytt token for denne Samvev-serveren."
+        },
+        "description": "API-tokenet ble avvist. Oppgi et nytt token for å koble til igjen.",
+        "title": "Autentiser Samvev på nytt"
+      },
+      "user": {
+        "data": {
+          "api_token": "API-token",
+          "base_url": "Serveradresse"
+        },
+        "data_description": {
+          "api_token": "Tokenet brukes bare for autentiserte forespørsler til Samvev.",
+          "base_url": "Grunnadressen til Samvev-serveren."
+        },
+        "description": "Koble Home Assistant til en Samvev-server.",
+        "title": "Koble til Samvev"
+      },
+      "reconfigure": {
+        "title": "Endre Samvev-forbindelse",
+        "description": "Oppgi adressen og en nøkkel for den samme Samvev-forbindelsen.",
+        "data": {
+          "base_url": "Serveradresse",
+          "api_token": "Forbindelsesnøkkel"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "messages": {
+        "name": "Aktive beskjeder"
+      },
+      "connection_status": {
+        "name": "Tilkoblingsstatus",
+        "state": {
+          "connected": "Tilkoblet",
+          "disconnected": "Frakoblet"
+        }
+      },
+      "last_success": {
+        "name": "Siste oppdatering"
+      }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Forespørselen til Samvev feilet."
+    },
+    "action_invalid_auth": {
+      "message": "Samvev avviste tilgangen. Godkjenn forbindelsen på nytt."
+    },
+    "conflict": {
+      "message": "Innholdet er endret. Oppdater og gjennomgå før du prøver igjen."
+    },
+    "item_not_found": {
+      "message": "Varen er ikke tilgjengelig."
+    },
+    "event_not_cached": {
+      "message": "Hent kalenderintervallet før hendelsen endres."
+    },
+    "read_only": {
+      "message": "Denne kilden er skrivebeskyttet."
+    },
+    "unsupported_recurrence": {
+      "message": "Opprettelse av gjentakende avtaler støttes ikke."
+    },
+    "invalid_event": {
+      "message": "Avtalen har ugyldige felt eller tidspunkt."
+    },
+    "entry_required": {
+      "message": "Velg en Samvev-forbindelse."
+    },
+    "entry_not_found": {
+      "message": "Samvev-forbindelsen finnes ikke."
+    },
+    "entry_not_loaded": {
+      "message": "Samvev-forbindelsen er ikke lastet."
+    },
+    "target_required": {
+      "message": "Velg minst én tillatt målgruppe."
+    }
+  },
+  "services": {
+    "create_message": {
+      "name": "Opprett beskjed",
+      "description": "Opprett en Samvev-beskjed som denne forbindelsen, bare til tillatte mottakere. Handlingen bekrefter ingen oppgave og gir ingen poeng.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev-forbindelse",
+          "description": "Velg forbindelsen når flere Samvev-forbindelser er lastet."
+        },
+        "body": {
+          "name": "Beskjed"
+        },
+        "audience": {
+          "name": "Målgruppe",
+          "description": "Bare husstands- og personmottakere som er uttrykkelig tillatt for forbindelsen."
+        },
+        "importance": {
+          "name": "Viktighet"
+        },
+        "publish_at": {
+          "name": "Publiseringstidspunkt",
+          "description": "Valgfritt ISO-tidspunkt med tidssone. Standard er nå."
+        },
+        "expires_at": {
+          "name": "Utløpstidspunkt",
+          "description": "Påkrevd ISO-tidspunkt med tidssone, senere enn publisering."
+        },
+        "request_key": {
+          "name": "Nøkkel for nytt forsøk",
+          "description": "Bruk samme nøkkel ved nye forsøk på én handling, og en ny nøkkel for en ny handling."
+        }
+      }
+    },
+    "update_message": {
+      "name": "Endre beskjed",
+      "description": "Endre en beskjed opprettet av denne forbindelsen. Uten angitt revisjon brukes sist observerte revisjon. Samtidige endringer gir en synlig feil.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev-forbindelse",
+          "description": "Velg forbindelsen når flere Samvev-forbindelser er lastet."
+        },
+        "message_id": {
+          "name": "Beskjed-ID"
+        },
+        "expected_revision": {
+          "name": "Observert revisjon",
+          "description": "Sist observerte revisjon. Samtidige endringer avvises."
+        },
+        "body": {
+          "name": "Beskjed"
+        },
+        "audience": {
+          "name": "Målgruppe",
+          "description": "Bare husstands- og personmottakere som er uttrykkelig tillatt for forbindelsen."
+        },
+        "importance": {
+          "name": "Viktighet"
+        },
+        "publish_at": {
+          "name": "Publiseringstidspunkt",
+          "description": "Valgfritt ISO-tidspunkt med tidssone. Standard er nå."
+        },
+        "expires_at": {
+          "name": "Utløpstidspunkt",
+          "description": "Påkrevd ISO-tidspunkt med tidssone, senere enn publisering."
+        },
+        "request_key": {
+          "name": "Nøkkel for nytt forsøk",
+          "description": "Bruk samme nøkkel ved nye forsøk på én handling, og en ny nøkkel for en ny handling."
+        }
+      }
+    },
+    "withdraw_message": {
+      "name": "Trekk tilbake beskjed",
+      "description": "Trekk tilbake en beskjed opprettet av denne forbindelsen. Handlingen oppretter ingen lese- eller fullføringskvittering.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Samvev-forbindelse",
+          "description": "Velg forbindelsen når flere Samvev-forbindelser er lastet."
+        },
+        "message_id": {
+          "name": "Beskjed-ID"
+        },
+        "expected_revision": {
+          "name": "Observert revisjon",
+          "description": "Sist observerte revisjon. Samtidige endringer avvises."
+        },
+        "request_key": {
+          "name": "Nøkkel for nytt forsøk",
+          "description": "Bruk samme nøkkel ved nye forsøk på én handling, og en ny nøkkel for en ny handling."
+        }
+      }
+    }
+  },
+  "selector": {
+    "importance": {
+      "options": {
+        "normal": "Normal",
+        "attention": "Viktig"
+      }
+    }
+  }
+}

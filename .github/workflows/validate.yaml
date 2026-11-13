@@ -1,0 +1,81 @@
+name: Validate integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy custom_components/samvev
+      - run: uv run pytest
+      - run: uv run python scripts/package_integration.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: samvev-homeassistant
+          path: dist/samvev-homeassistant-*.zip
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check branch license and GitHub metadata
+        id: license_metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s LICENSE
+          detected_license="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.license.spdx_id // ""')"
+          if [ -z "$detected_license" ]; then
+            echo 'ignore=license' >> "$GITHUB_OUTPUT"
+            echo 'Default-branch license metadata is not available yet; this review branch includes LICENSE. The HACS license check activates automatically once GitHub detects it.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ignore=' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: hacs/action@main
+        with:
+          category: integration
+          comment: false
+          # GitHub's license metadata reads the default branch, which is still
+          # documentation-only until this PR merges. The branch includes MIT LICENSE.
+          # Brand submission to HA's central registry is outside a HACS custom repo.
+          ignore: brands ${{ steps.license_metadata.outputs.ignore }}
+  actual-samvev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: pabben/samvev
+          ref: 5aae5e0719bea79edbc4bcdd6a174d2664b95388
+          path: .local/samvev
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Build and start the synthetic Samvev fixture
+        working-directory: .local/samvev
+        run: |
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml build ha-bridge-api
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml up -d ha-bridge-api
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4193/api/v1/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Test actual HA entities against actual Samvev HTTP
+        env:
+          SAMVEV_REAL_URL: http://127.0.0.1:4193
+        run: uv run pytest tests/test_roundtrip.py --no-cov
+      - name: Remove only the isolated test resources
+        if: always()
+        working-directory: .local/samvev
+        run: |
+          docker compose -p samvev-m1 -f tests/ha-bridge/compose.yaml rm --stop --force ha-bridge-api ha-bridge-check ha-bridge-db
+          docker network rm samvev-m1-ha-bridge-isolated || true

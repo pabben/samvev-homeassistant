@@ -1,0 +1,9 @@
+# Optional replacement for the native calendar card in dashboard.yaml.
+# Install Calendar Card Pro through HACS separately and reload the frontend.
+type: custom:calendar-card-pro
+entities:
+  - calendar.samvev_ha_samvev
+days_to_show: 2
+show_location: true
+show_month: false
+show_empty_days: true

@@ -1,0 +1,8 @@
+{
+  "testedAt": "2026-11-12T16:04:08.128Z",
+  "haVersion": "2026.2.3",
+  "pollIntervalSeconds": 30,
+  "serverAcknowledgementToDashboardSeconds": 24.219,
+  "nativeCheckboxConfirmedBySamvev": true,
+  "syntheticDataOnly": true
+}
