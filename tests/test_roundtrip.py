@@ -408,6 +408,60 @@ async def test_actual_shopping_messages_calendar_and_revocation(hass, real_conne
     assert hass.states.get(messages_id).attributes.get("messages", []) == []
 
 
+async def test_actual_ha_edits_and_withdraws_existing_ui_message(hass, real_connection):
+    """The HA action edits a real member-authored message under explicit policy."""
+    entry, request, base, sharing_path, sharing = real_connection
+    await request(
+        "PATCH",
+        sharing_path,
+        {
+            "expectedRevision": sharing["revision"],
+            "listIds": ["groceries"],
+            "household": True,
+            "personIds": [],
+            "calendarSourceIds": [],
+            "allowSharedNativeWrites": True,
+        },
+    )
+    original = await request(
+        "POST",
+        base + "/messages",
+        {
+            "body": "Synthetic existing UI message",
+            "importance": "normal",
+            "audience": {"household": True, "personIds": [], "displayIds": []},
+            "expiresAt": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            "idempotencyKey": str(uuid4()),
+        },
+        expected=201,
+    )
+    coordinator = entry.runtime_data.coordinator
+    await coordinator.async_refresh()
+    await hass.services.async_call(
+        DOMAIN,
+        "update_message",
+        {"message_id": original["id"], "body": "Synthetic UI message edited from HA"},
+        blocking=True,
+    )
+    row = next(
+        row for row in coordinator.data["messages"] if row["id"] == original["id"]
+    )
+    assert row["authorType"] == "member"
+    assert row["revision"] == original["revision"] + 1
+    member_rows = (await request("GET", base + "/messages"))["messages"]
+    assert (
+        next(row for row in member_rows if row["id"] == original["id"])["body"]
+        == "Synthetic UI message edited from HA"
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "withdraw_message",
+        {"message_id": original["id"]},
+        blocking=True,
+    )
+    assert all(row["id"] != original["id"] for row in coordinator.data["messages"])
+
+
 async def test_provisioning_command_actual_server(
     tmp_path, monkeypatch, socket_enabled
 ):
