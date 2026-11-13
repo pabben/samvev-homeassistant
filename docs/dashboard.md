@@ -1,69 +1,78 @@
-# Dashboard and Shelly Wall Display XL
+# Dashboard og Shelly Wall Display XL
 
-The adapter provides ordinary HA entities; the dashboard is built in HA. It does
-not embed the Samvev website and does not require PR #25.
+Integrasjonen gir vanlige HA-entiteter. Dashboardet bygges i HA og krever verken
+innbygging av Samvevs nettside eller endringene i PR #25.
 
-1. Add the integration with connection name **Samvev HA**.
-2. Find its actual entities under **Devices & services → Samvev → Entities**.
-3. Create a dashboard, take control if required, and paste
-   [examples/dashboard.yaml](../examples/dashboard.yaml) into its raw configuration.
-4. Replace entity IDs if HA has assigned a suffix or you used another name.
-5. Add each explicitly shared imported calendar as another calendar/agenda card,
-   or combine them in one of the optional calendar cards below.
+## Legg til dashboardet
 
-| Example entity | Purpose |
+1. Legg til integrasjonen med forbindelsesnavnet **Samvev HA**.
+2. Finn de faktiske entitetene under **Innstillinger → Enheter og tjenester → Samvev**.
+3. Opprett et dashboard og åpne den rå konfigurasjonen. Ta kontroll over dashboardet først hvis HA ber om det.
+4. Lim inn [examples/dashboard.yaml](../examples/dashboard.yaml).
+5. Bytt entitets-ID-er hvis du brukte et annet navn eller HA har lagt til et suffiks.
+6. Legg til hver importerte kalender du har delt, som et eget kalender-/dagsplankort, eller samle dem i et av de valgfrie kortene nedenfor.
+
+| Eksempel på entitet | Formål |
 |---|---|
-| `todo.samvev_ha_groceries` | Standard checkbox/add/edit/delete grocery board |
-| `sensor.samvev_ha_messages` | Count state and `messages` array of all active rows |
-| `calendar.samvev_ha_samvev` | Native events; full standard calendar interval API |
-| `sensor.samvev_ha_connection_status` | Connected/disconnected, polling interval, last success |
-| `sensor.samvev_ha_last_success` | Timestamp of last successful snapshot |
+| `todo.samvev_ha_groceries` | Felles handleliste med avkryssing, tillegg, endring og sletting |
+| `sensor.samvev_ha_messages` | Antall aktive beskjeder, med alle beskjedene i attributtet `messages` |
+| `calendar.samvev_ha_samvev` | Egne Samvev-avtaler og vanlig kalenderhenting for valgte tidsrom |
+| `sensor.samvev_ha_connection_status` | Tilkoblingsstatus, henteintervall og siste vellykkede henting |
+| `sensor.samvev_ha_last_success` | Tidspunktet for siste vellykkede henting |
 
-The default dashboard uses native to-do, Markdown and entities cards. Its
-calendar Markdown reads `calendar.*`'s `agenda` attribute, two complete day groups
-in the household timezone. This handles a Sunday/Monday boundary, simultaneous
-appointments, overnight overlap and all-day entries without a custom card. The
-standard calendar entity still exposes every event in an explicitly requested
-interval; the two-day display attribute does not limit calendar APIs.
+## Hva standarddashboardet viser
 
-The two-day projection includes earlier appointments today. It shows unavailable
-or stale content explicitly. Imported calendars whose synchronized window does
-not cover both days become unavailable rather than claiming a complete empty
-plan. The `source_freshness`, `last_source_sync`, `source_error` and
-`last_complete_window` calendar attributes distinguish source sync problems from
-an otherwise healthy HA connection. Samvev import intervals/provider caches can
-add delay beyond the HA polling interval.
+Eksemplet bruker HAs innebygde gjøremåls-, Markdown- og entitetskort.
+Dagsplankortet leser kalenderentitetens `agenda`-attributt, med komplette grupper
+for i dag og i morgen i husstandens tidssone. Dette dekker også søndag/mandag,
+samtidige avtaler, avtaler som går over midnatt og heldagshendelser.
 
-The example labels are Norwegian; change them in HA for other display languages.
-Integration-owned GUI/entity/action text is localized in `en` and `nb`. Keep the
-HA display timezone aligned with the household timezone for formatted clock times.
-The server always preserves aware event instants and civil all-day dates.
+Vanlige kalenderkort og automasjoner kan fortsatt hente alle tillatte hendelser
+innen et valgt tidsrom. Visningen for to dager begrenser ikke kalender-API-et.
+Også tidligere avtaler fra dagens dato er med i dagsplanen.
 
-## Optional existing calendar cards
+Utilgjengelig eller utdatert innhold merkes tydelig. Hvis en importert kalenders
+synkroniserte tidsrom ikke dekker begge dagene, blir den utilgjengelig fremfor å
+late som dagsplanen er komplett og tom. Attributtene `source_freshness`,
+`last_source_sync`, `source_error` og `last_complete_window` skiller feil hos
+kalenderkilden fra feil på forbindelsen mellom HA og Samvev.
 
-[Calendar Card Pro](https://github.com/alexpfau/calendar-card-pro) and
-[Week Planner Card](https://github.com/FamousWolf/week-planner-card) were inspected
-against their upstream configuration examples. Install either through HACS
-separately and refresh the frontend/resources as that project's guide describes.
-Neither is bundled or required by this integration.
+Kalenderleverandørens mellomlager og Samvevs importintervall kan gi forsinkelse
+i tillegg til HAs henting hvert 30. sekund. Tekst i integrasjonens oppsett,
+entiteter og handlinger finnes på norsk bokmål og engelsk (`nb`/`en`).
+Dashboardeksemplet er på norsk og kan redigeres i HA.
 
-Replace the day-plan Markdown card with
-[calendar-card-pro.yaml](../examples/calendar-card-pro.yaml) or
-[week-planner.yaml](../examples/week-planner.yaml). Both examples request two days;
-add your native and selected imported `calendar.*` entities to the relevant list.
-Calendar Card Pro uses `entities`/`days_to_show`; Week Planner uses
-`calendars`/`days`/`startingDay`. Do not mix their configuration keys. Native HA
-calendar cards and automations remain supported independently.
+Bruk samme tidssone på HA-visningen og i husstanden for riktig formatering av
+klokkeslett. Serveren bevarer tidssoneangitte tidspunkt og heldagshendelsenes
+datoer.
 
-## Display checks
+## Valgfrie kalenderkort
 
-Sections stack vertically on a narrow display and use three columns at 1280px.
-Messages wrap fully, retain separate authors and importance, and remain a list;
-no message text is stored in the truncated sensor state. The built-in to-do card
-provides its normal touch/keyboard controls. Detailed evidence and screenshots are
-in [validation.md](validation.md).
+[Calendar Card Pro](https://github.com/alexpfau/calendar-card-pro) og
+[Week Planner Card](https://github.com/FamousWolf/week-planner-card) kan brukes
+som alternativer. Konfigurasjonen er kontrollert mot prosjektenes egne eksempler.
+Installer valgt kort separat gjennom HACS og oppdater nettleseren/ressursene slik
+kortets veiledning beskriver. Ingen av dem er påkrevd eller følger med Samvev.
 
-Browser checks at 1280×752 and 390×844 are not physical Shelly verification. The
-remaining device check is the actual Shelly firmware's HA dashboard path, scrolling,
-touch operation, sustained performance and login/session persistence. No HA public
-exposure or networking/security changes are required by this adapter.
+Bytt ut dagsplankortet med
+[calendar-card-pro.yaml](../examples/calendar-card-pro.yaml) eller
+[week-planner.yaml](../examples/week-planner.yaml). Begge viser to dager.
+Legg inn egne og uttrykkelig delte importkalendere i den aktuelle entitetslisten.
+
+Calendar Card Pro bruker `entities` og `days_to_show`. Week Planner bruker
+`calendars`, `days` og `startingDay`. Ikke bland innstillingene mellom kortene.
+HAs innebygde kalenderkort og automasjoner fungerer uavhengig av disse tilleggene.
+
+## Kontroll av skjermvisning
+
+Seksjonene vises i tre kolonner ved 1280 piksler og stables på smale skjermer.
+Beskjedtekst brytes over flere linjer. Flere aktive beskjeder beholder hver sin
+avsender og viktighet; de legges ikke som en lang tekst i sensorens tilstand.
+Det innebygde gjøremålskortet har sine vanlige berørings- og tastaturkontroller.
+Se [testbevis og skjermbilder](validation.md) for utførte kontroller. Den tekniske
+testrapporten er på engelsk.
+
+Nettleservisning er kontrollert ved 1280×752 og 390×844 i lyst og mørkt tema.
+Dette er ikke en fysisk test av Shelly. Faktisk Shelly-fastvare, berøring,
+rulling, ytelse og vedvarende innlogging må fortsatt prøves på enheten.
+Integrasjonen krever ikke offentlig eksponering av HA eller endringer i nettverksvern.

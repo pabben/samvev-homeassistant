@@ -1,62 +1,97 @@
-# Installation and connection management
+# Installasjon og tilkobling
 
-## Compatible server
+Installasjonen består av tre deler: oppdatere Samvev med det nødvendige API-et,
+installere integrasjonen i Home Assistant og opprette en egen tilgangsnøkkel med
+valgt deling. Deretter kan du legge til [dashboardet](dashboard.md).
 
-Install the companion Samvev backend change implementing HA bridge v1 first.
-The reference baseline is `feat/m3-family-hub` at `a298203`; the bridge change is
-on `feat/native-ha-bridge`, commit `5aae5e0719bea79edbc4bcdd6a174d2664b95388`,
-and adds migration `047_home_assistant_bridge.sql`.
-See the [backend protocol](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md).
-This development work does not deploy it into an existing installation. Follow
-Samvev's backup/migration procedure when you separately authorize an upgrade.
-PR #25's iframe/display embedding is independent and is not required.
+## Før du starter
 
-Backend migration 047 extends allowed integration capabilities, adds explicit
-sharing and durable operation receipts, and supports an integration message/board
-actor. Existing credential meanings and earlier migration checksums are retained.
-The native calendar uses Samvev's existing item model, not a parallel calendar
-server. For an HA-adapter rollback, revoke the new connection and disable/remove it;
-retain the additive schema and authored data. Do not run a destructive down
-migration or restore a database over newer writes. A full schema rollback needs
-a separately verified backup and the normal Samvev recovery procedure.
-An older backend image is not automatically compatible with integration-authored
-messages and native all-day events. Backend image rollback is not validated here;
-prefer forward recovery or prepare and test a separate compatibility/data plan.
+Du trenger Home Assistant **2026.2.3 eller nyere** og en Samvev-installasjon med
+**HA bridge, skjemaversjon 1**. Integrasjonen har versjon **0.2.0**. Den er testet
+på HA 2026.2.3; dette er ikke en bekreftelse på testing av alle nyere HA-versjoner.
+HA-miljøet må ha Python 3.13.2 eller nyere. Du trenger ikke installere Python
+separat i en vanlig HA OS-installasjon.
 
-## Install the custom component
+Samvev-endringen må installeres først. Den ligger i
+[Samvev-PR #28](https://github.com/pabben/samvev/pull/28), på grenen
+`feat/native-ha-bridge`, testet ved commit
+`5aae5e0719bea79edbc4bcdd6a174d2664b95388`. Den legger til migrasjonen
+`047_home_assistant_bridge.sql`. Utviklingsgrunnlaget er `feat/m3-family-hub`
+ved `a298203`.
 
-Supported minimum: Home Assistant 2026.2.3 / Python 3.13.2. Tests were executed on
-HA 2026.2.3, not every later HA version. Integration version: 0.2.0.
+Følg Samvevs vanlige rutine for sikkerhetskopi og databasemigrasjon når en
+oppgradering er avtalt. Denne veiledningen installerer eller oppgraderer ikke en
+aktiv instans automatisk. [API-kontrakten](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
+beskriver serverkravene. PR #25, som bygger inn Samvevs nettside i HA, er en
+uavhengig løsning og er ikke nødvendig her.
 
-For PR review, download the `feat/native-ha-entities` branch archive and copy only
-`custom_components/samvev` into your HA configuration's `custom_components` folder.
-Restart HA. After the PR is merged, HACS's **Custom repositories** can install
-`pabben/samvev-homeassistant` with category **Integration**. The project is not
-represented as approved in HACS's default selection. A Git branch under review
-does not change what HACS downloads from the default branch.
+## Kan installasjonen gjøres av en agent eller via MCP?
 
-## Create a machine credential
+Ja, en agent kan utføre installasjonen hvis den har nødvendig
+administrasjonstilgang, for eksempel SSH og filtilgang til HA-konfigurasjonen,
+eller et administrasjonsgrensesnitt som støtter HACS og integrasjonsoppsett.
+Oppgradering av Samvev og eventuell omstart av HA må være uttrykkelig avtalt.
 
-Run [scripts/provision_connection.py](../scripts/provision_connection.py) on a
-trusted machine. It needs Python's standard library, not the HA development venv.
-The manager password is entered using a non-echoing prompt. The temporary manager
-session is logged out; the adapter stores only the separately revocable bearer.
-The command refuses redirects and will not overwrite an existing output file.
-If sharing/file setup fails, it attempts to revoke the incomplete new connection.
+En MCP-forbindelse må ha egne administrasjonsverktøy for å kunne gjøre dette.
+Verktøy som bare leser entiteter, styrer lys eller behandler gjøremål, gir ikke
+installasjonsadgang. MCP-navnet alene sier derfor ikke om en forbindelse kan
+installere integrasjoner. Ingen offentlig eksponering av HA er nødvendig.
 
-Inspect available IDs without creating a connection:
+## 1. Installer integrasjonen i HA
+
+### Via HACS etter at endringen er slått sammen
+
+Når [HA-PR #1](https://github.com/pabben/samvev-homeassistant/pull/1) er slått
+sammen til standardgrenen:
+
+1. Åpne menyen for egendefinerte repoer i HACS. På engelsk heter den **Custom repositories**.
+2. Legg til `https://github.com/pabben/samvev-homeassistant` med kategorien **Integration**.
+3. Last ned **Samvev**.
+4. Start HA på nytt.
+5. Fortsett med tilgangsnøkkel og GUI-oppsett nedenfor.
+
+Dette er installasjon som egendefinert HACS-repo. Integrasjonen er ikke oppgitt
+som godkjent i HACS sitt standardutvalg.
+
+### Manuelt fra arbeidsgrenen eller ZIP-pakken
+
+Før PR-en er slått sammen kan du laste ned [arbeidsgrenen som ZIP](https://github.com/pabben/samvev-homeassistant/archive/refs/heads/feat/native-ha-entities.zip),
+eller integrasjonspakken fra en vellykket [GitHub Actions-kjøring](https://github.com/pabben/samvev-homeassistant/actions/workflows/validate.yaml):
+
+1. Pakk ut arkivet.
+2. Kopier bare `custom_components/samvev` til `<HA-konfigurasjon>/custom_components/samvev`.
+3. Kontroller at filen ligger på `<HA-konfigurasjon>/custom_components/samvev/manifest.json`.
+4. Start HA på nytt.
+
+Hvis mappen finnes fra før, ta en kopi før den erstattes. Ikke legg hele repoet
+som en ekstra undermappe. Utviklingsskriptene og Samvevs serverkode skal ikke
+kopieres inn i HA.
+
+## 2. Opprett en egen tilgangsnøkkel
+
+Kjør [scripts/provision_connection.py](../scripts/provision_connection.py) på en
+maskin du stoler på. Skriptet bruker Pythons standardbibliotek og trenger ikke
+HA-utviklingsmiljøet. Eksemplene forutsetter Python 3.13.
+
+Du oppgir en Samvev-administrators passord i en skjult ledetekst. Skriptet bruker
+en midlertidig administratorøkt til å opprette forbindelsen og logger deretter
+ut. HA får bare den nye, separat tilbakekallbare tilgangsnøkkelen.
+
+### Finn tilgjengelige husstander, personer og kalenderkilder
+
+Denne kommandoen viser ID-ene du kan velge, uten å opprette en forbindelse:
 
 ```bash
 python scripts/provision_connection.py \
   --url https://samvev.example.invalid --email manager@example.invalid --inspect
 ```
 
-The output contains household/person/source IDs and names required for selection,
-not birthdays, account emails, permissions or private content. Choose the existing
-household and sources. Samvev currently offers one native shopping board,
-`groceries`; there are no extra named lists to create in this integration.
+Bytt ut eksempeladressen og e-postadressen med dine egne. Utskriften viser ID og
+navn som trengs for valget, ikke fødselsdatoer, kontoenes e-postadresser,
+rettigheter eller privat innhold. Samvev har for øyeblikket én felles handleliste,
+med den stabile ID-en `groceries`.
 
-Example explicit selection:
+### Velg hva forbindelsen skal kunne lese og endre
 
 ```bash
 python scripts/provision_connection.py \
@@ -65,64 +100,108 @@ python scripts/provision_connection.py \
   --share-groceries --write-groceries \
   --messages --write-messages --calendar --write-calendar \
   --share-household --calendar-source SOURCE_UUID \
-  --output /private/samvev-ha-connection.json
+  --output "$HOME/samvev-ha-tilkobling.json"
 ```
 
-Omit `--calendar-source` if only native Samvev appointments are wanted. Repeat it
-for each existing imported source. Omit all `--write-*` options for read-only
-access. Repeat `--person PERSON_UUID` to permit content explicitly readable by
-those people; this is independent of whom an appointment concerns. Omit
-`--share-household` if household-addressed content should not be exported.
-Imported source reader ACLs still apply. Both read and write capabilities are
-required by mutation endpoints returning an authoritative resource.
+Erstatt `HOUSEHOLD_UUID` og `SOURCE_UUID` med valgte ID-er. Flagg og API-felter
+beholder sine engelske programnavn.
 
-The new JSON file is created with mode 0600. Use its `base_url` and `api_token`
-in HA's **Settings → Devices & services → Add integration → Samvev** form.
-Configure the final base URL as reachable **from HA**. HTTPS validates normal
-certificates; HTTP is intended for a trusted local network/development fixture.
-The token authenticates the installation/connection identity and versioned bridge,
-not a public health endpoint. No callback from Samvev to HA is needed.
+- Utelat `--calendar-source SOURCE_UUID` hvis du bare vil bruke egne Samvev-avtaler. Gjenta flagget for hver importert kalender du vil dele.
+- Utelat de aktuelle `--write-*`-flaggene for skrivebeskyttet tilgang.
+- Bruk `--person PERSON_UUID`, eventuelt flere ganger, for innhold som de valgte personene har lesetilgang til. Hvem en avtale gjelder, er et separat spørsmål.
+- Utelat `--share-household` hvis husstandsrettet innhold ikke skal deles.
+- Bruk `--household UUID` for å velge husstand hvis administratoren administrerer flere.
 
-## Sharing and revocation
+Importerte kalendere beholder sine eksisterende leserrettigheter og er
+skrivebeskyttet i HA. Skrivehandlinger som returnerer innhold, krever både lese-
+og skriverettighet for den aktuelle innholdstypen.
 
-The provisioning command creates server-side sharing through existing manager
-login/CSRF authorization. It does not let HA choose its own permissions. Server
-administration paths are:
+Skriptet oppretter en ny fil med filmodus `0600`, altså bare tilgjengelig for
+filens eier. Det overskriver ikke en eksisterende fil og skriver ikke nøkkelen
+til terminalen. Ved feil under deling eller filopprettelse forsøker det å
+avslutte den ufullstendige forbindelsen. Det følger ikke HTTP-omdirigeringer.
 
-- `GET /api/v1/households/:householdId/integrations` — connection/credential metadata.
-- `GET/PATCH …/integrations/:connectionId/ha-sharing` — inspect/replace the complete
-  export policy with its `expectedRevision`.
-- `POST …/integrations/:connectionId/credentials` — issue a replacement credential
-  with connection `expectedRevision` and explicitly selected capabilities.
-- `POST …/integrations/:connectionId/credentials/:credentialId/revoke` — revoke
-  the old credential with credential `expectedRevision`.
-- `POST …/integrations/:connectionId/revoke` — revoke the entire stable connection
-  with connection `expectedRevision`.
+## 3. Koble til i HA
 
-These are manager APIs, not bearer APIs. Use Samvev's existing authenticated
-administration tooling; do not put manager sessions in HA. See the full
-[sharing payload and credential API](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
-and [M3 credential administration](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/M3_API.md).
-For example, removing `groceries` from `listIds` stops its disclosure/writes.
-An empty household/person audience stops messages/calendar disclosure. Imported
-sources need both source selection and current reader permission. Server revokes
-access immediately; HA clears displayed protected state on the next request,
-normally within its 30-second poll schedule. Lost credentials initiate HA reauth.
+1. Åpne **Innstillinger → Enheter og tjenester → Legg til integrasjon**.
+2. Søk etter **Samvev**.
+3. Oppgi Samvev-adressen fra `base_url` og tilgangsnøkkelen fra `api_token` i filen du nettopp opprettet.
+4. Fullfør oppsettet og kontroller at tilkoblingsstatusen blir **Tilkoblet**.
+5. Legg til [dashboardeksemplet](dashboard.md).
 
-## Reconfigure, rotate, unload and remove
+Adressen må være tilgjengelig **fra HA**. HTTPS bruker vanlig
+sertifikatkontroll. HTTP er beregnet på et betrodd lokalnett eller et isolert
+testmiljø. Forbindelsen kontrollerer nøkkel, installasjonsidentitet og API-versjon;
+en offentlig helsesjekk alene er ikke nok. Samvev trenger ingen tilbakekobling
+til HA.
 
-Use the integration entry's **Reconfigure** menu to change the server URL or token.
-The handshake must return the same stable installation and connection identity;
-use a new integration entry for a different connection. Reauthentication accepts
-a replacement token for the same connection. Normal reload stops old listeners,
-timers/background tasks and reinstalls entity platforms.
+Ikke bruk en administratorøkt, nettlesercookie, HA-nøkkel eller skjermcookie som
+tilgangsnøkkel til denne integrasjonen.
 
-Removing the HA config entry unloads its platforms and deletes its local operation
-key store. It does **not** revoke the server credential or delete Samvev content:
-revoke the connection in Samvev as a separate deliberate action. This preserves
-server-authored grocery items/messages/events. Manual uninstall additionally
-removes the copied component folder after the config entry has been removed.
+## Endre deling eller trekk tilbake tilgang
 
-HA users able to access these entities can see the content shared with this
-connection. HA dashboard visibility is not an independent Samvev person grant.
-Use separate narrowly shared connections/HA access policies when audiences differ.
+Samvev bestemmer delingen. HA kan ikke utvide sine egne rettigheter.
+Administratoren kan inspisere og erstatte delingsreglene eller trekke tilbake
+en enkelt nøkkel eller hele forbindelsen.
+
+For administrasjon gjennom API-et brukes de vanlige administratorøktene med
+CSRF-beskyttelse, ikke HA-forbindelsens nøkkel:
+
+| Endepunkt | Formål |
+|---|---|
+| `GET /api/v1/households/:householdId/integrations` | Vis forbindelser og nøkkelmetadata |
+| `GET/PATCH …/integrations/:connectionId/ha-sharing` | Les eller erstatt hele delingsregelen med `expectedRevision` |
+| `POST …/integrations/:connectionId/credentials` | Opprett en erstatningsnøkkel med valgte rettigheter og forbindelsens `expectedRevision` |
+| `POST …/integrations/:connectionId/credentials/:credentialId/revoke` | Trekk tilbake den gamle nøkkelen med nøkkelens `expectedRevision` |
+| `POST …/integrations/:connectionId/revoke` | Trekk tilbake hele forbindelsen med forbindelsens `expectedRevision` |
+
+Se [delings- og nøkkelkontrakten](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
+og [administrasjon av integrasjonsnøkler](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/M3_API.md)
+for de tekniske detaljene. Disse API-beskrivelsene er på engelsk.
+
+Hvis `groceries` fjernes fra `listIds`, stoppes lesing og endring av handlelisten.
+En tom husstands-/personmålgruppe stopper deling av beskjeder og kalender.
+Importerte kilder krever både valgt kilde og fortsatt lesetilgang.
+
+Tilbakekalling gjelder straks på serveren. HA fjerner tidligere viste data ved
+neste forespørsel, normalt innen den planlagte hentingen hvert 30. sekund.
+Avvist nøkkel starter HAs flyt for ny autentisering.
+
+## Endre adresse, bytt nøkkel eller fjern integrasjonen
+
+Bruk menyvalget for å endre integrasjonens oppsett, **Reconfigure** på engelsk,
+for å bytte serveradresse eller nøkkel. Oppsettet må fortsatt vise til samme
+Samvev-installasjon og forbindelse. En annen forbindelse legges til som en ny
+integrasjon. Ny autentisering godtar en erstatningsnøkkel for samme forbindelse.
+
+Vanlig gjeninnlasting stopper gamle lyttere, tidtakere og bakgrunnsoppgaver og
+laster entitetene på nytt. Når integrasjonen fjernes fra HA, ryddes entitetene
+og det lokale lageret for forespørselsnøkler.
+
+Fjerning i HA tilbakekaller **ikke** nøkkelen i Samvev og sletter ikke
+handlevarer, beskjeder eller avtaler. Trekk tilbake forbindelsen i Samvev hvis
+tilgangen også skal opphøre der. Ved manuell avinstallasjon fjernes den kopierte
+komponentmappen etter at integrasjonen er fjernet fra HA.
+
+HA-brukere med tilgang til disse entitetene kan se innholdet som er delt med
+forbindelsen. Dashboardtilgang i HA er ikke en egen personrettighet i Samvev.
+Bruk separate forbindelser med smal deling og passende HA-tilgang hvis
+målgruppene er forskjellige.
+
+## Tilbakeføring
+
+Migrasjon 047 utvider eksisterende rettigheter, legger til uttrykkelig deling og
+varige forespørselskvitteringer og støtter forbindelsen som egen aktør. Tidligere
+nøklers betydning og kontrollsummene for eldre migrasjoner beholdes. Kalenderen
+bruker Samvevs eksisterende datamodell.
+
+For å trekke tilbake HA-integrasjonen kan du avslutte forbindelsen og deaktivere
+eller fjerne integrasjonen. Behold den utvidede databasestrukturen og innholdet.
+Ikke kjør en destruktiv nedmigrasjon eller gjenopprett en gammel database over
+nyere endringer.
+
+En eldre serverversjon er ikke automatisk kompatibel med beskjeder fra
+integrasjonsaktører eller egne heldagshendelser. Tilbakeføring til et eldre
+serverimage er ikke testet her. Foretrekk feilretting på den nye versjonen, eller
+lag og test en egen kompatibilitets- og dataplan. Full tilbakeføring av databasen
+krever en separat kontrollert sikkerhetskopi og Samvevs vanlige gjenopprettingsrutine.

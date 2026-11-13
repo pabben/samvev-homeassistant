@@ -1,105 +1,123 @@
 # Samvev for Home Assistant
 
-A native custom integration connecting an existing [Samvev](https://github.com/pabben/samvev)
-installation to Home Assistant. No extra server, iframe, AI engine or duplicate
-family database is installed.
+En integrasjon som kobler en eksisterende [Samvev](https://github.com/pabben/samvev)-installasjon
+til Home Assistant. Du trenger ingen ekstra server, innbygging av nettsiden,
+AI-motor eller ny familiedatabase.
 
-- **Shopping:** standard `todo` entity; add, rename, check, reopen and delete with
-  Samvev's stable IDs, revisions and permissions. Samvev currently has one shared
-  household grocery board; explicitly select that existing board.
-- **Messages:** every active shared message, with author, audience, publication,
-  expiry, importance and revision. Numeric sensor state; complete message rows in
-  attributes. Actions create, edit and withdraw this connection's own messages.
-- **Calendar:** standard calendar entities and full interval reads. Create,
-  edit and cancel this connection's own Samvev events. Existing imported
-  Google/Outlook/ICS/Spond/HA sources remain read-only and explicitly selected.
-- **Connection:** GUI setup, reauthentication and URL/token reconfiguration;
-  30-second polling, last-success status, recovery and durable retry keys.
+- **Handleliste:** vanlig `todo`-entitet. Legg til, endre navn, kryss av, gjenåpne
+  og slett varer med Samvevs stabile ID-er, revisjoner og rettigheter. Samvev har
+  for øyeblikket én felles handleliste; denne må deles uttrykkelig.
+- **Beskjeder:** alle aktive delte beskjeder, med avsender, målgruppe,
+  publisering, utløp, viktighet og revisjon. Sensorens tilstand er et antall;
+  hele beskjedlisten finnes i attributtene. Handlinger oppretter, endrer og
+  trekker tilbake beskjeder som forbindelsen selv har opprettet.
+- **Kalender:** vanlige kalenderentiteter med alle hendelser i et forespurt
+  tidsrom. Opprett, endre og avlys egne Samvev-avtaler. Importerte Google-,
+  Outlook-, ICS-, Spond- og HA-kalendere velges uttrykkelig og er skrivebeskyttet.
+- **Tilkobling:** GUI-oppsett, ny autentisering, endring av adresse/nøkkel,
+  automatisk henting hvert 30. sekund, status for siste vellykkede henting og
+  håndtering av avbrudd og nye forsøk.
 
-Samvev remains authoritative for household membership, sharing, content and
-business rules. A check mark never awards XP or parental approval. HA actions
-are attributed to the named integration connection, **not** the HA dashboard user.
+Samvev bestemmer personer, husstander, rettigheter, innhold og forretningsregler.
+Avkryssing gir ingen foreldregodkjenning eller XP. Handlinger fra HA registreres
+som den navngitte integrasjonsforbindelsen, ikke som personen som bruker dashboardet.
 
-## Requirements and installation
+## Krav og installasjon
 
-Home Assistant **2026.2.3 or later**, Python 3.13.2 or later, and a Samvev server
-implementing **HA bridge schema version 1** are required. This is a paired change:
-older Samvev installations with only `/api/v1/integrations/items` are insufficient.
-See the [upstream contract](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
-and [installation guide](docs/installation.md). The integration validates this
-contract during setup instead of accepting an unauthenticated health check.
+Du trenger **Home Assistant 2026.2.3 eller nyere**, Python 3.13.2 eller nyere i
+HA-miljøet og en Samvev-server med **HA bridge, skjemaversjon 1**. Samvev må
+oppdateres med [API-endringen i PR #28](https://github.com/pabben/samvev/pull/28)
+før tilkoblingen kan brukes. Det eldre `/api/v1/integrations/items`-API-et alene
+strekker ikke til.
 
-### HACS custom repository
+Se [installasjonsveiledningen på norsk](docs/installation.md). Den beskriver
+rekkefølgen, tilgangsnøkkel, deling, oppsett og fjerning. Den tekniske
+[API-kontrakten](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
+er på engelsk. Oppsettet validerer faktisk nøkkel og API-versjon; en offentlig
+helsesjekk regnes ikke som autorisasjon.
 
-After the implementation PR has been merged into this repository's default branch:
+### HACS som egendefinert repo
 
-1. In HACS, open **Custom repositories**.
-2. Add `https://github.com/pabben/samvev-homeassistant`, category **Integration**.
-3. Download **Samvev** and restart HA.
-4. Open **Settings → Devices & services → Add integration → Samvev**.
-5. Enter the Samvev base URL and the separately issued integration bearer token.
+Når implementasjonen er slått sammen til repoets standardgren:
 
-This is a custom repository, not a claim of inclusion in HACS's default selection.
-While reviewing the unmerged branch, use the manual installation below.
+1. Åpne menyen for egendefinerte repoer i HACS (**Custom repositories** på engelsk).
+2. Legg til `https://github.com/pabben/samvev-homeassistant`, kategori **Integration**.
+3. Last ned **Samvev** og start HA på nytt.
+4. Åpne **Innstillinger → Enheter og tjenester → Legg til integrasjon → Samvev**.
+5. Oppgi Samvev-adressen og en egen tilgangsnøkkel for forbindelsen.
 
-### Manual installation / PR review
+Integrasjonen er ikke oppgitt som godkjent i HACS sitt standardutvalg.
+Før PR-en er slått sammen, brukes manuell installasjon nedenfor.
 
-Download the `feat/native-ha-entities` branch archive. Copy its
-`custom_components/samvev` directory into `<HA config>/custom_components/samvev`
-and restart HA. The result must be `<HA config>/custom_components/samvev/manifest.json`,
-not an extra nested repository directory. Add the integration through the GUI.
-Only copy the custom component; development scripts and backend code are not HA
-runtime requirements.
+### Manuell installasjon fra arbeidsgrenen eller ZIP
 
-## Explicit sharing
+Last ned [arbeidsgrenen som ZIP](https://github.com/pabben/samvev-homeassistant/archive/refs/heads/feat/native-ha-entities.zip)
+eller integrasjonspakken fra en vellykket [GitHub Actions-kjøring](https://github.com/pabben/samvev-homeassistant/actions/workflows/validate.yaml). Kopier bare `custom_components/samvev` til
+`<HA-konfigurasjon>/custom_components/samvev`, og start HA på nytt.
+Filen må ende på `<HA-konfigurasjon>/custom_components/samvev/manifest.json`,
+uten en ekstra repo-mappe i stien. Legg deretter til integrasjonen gjennom GUI-et.
+Utviklingsskriptene og Samvevs serverkode skal ikke kopieres til HA.
 
-Issue a new revocable credential for HA. Do not paste an administrator session,
-HA token, browser cookie or paired-display cookie into the config flow.
+### Kan en agent gjøre installasjonen?
 
-The supplied [provisioning command](scripts/provision_connection.py) uses a
-short-lived Samvev manager login to select content and issue a bearer credential.
-It revokes that temporary session afterwards; HA receives only the new credential.
-For example, from a trusted machine with Python 3.13:
+Ja, med administrasjonstilgang til den aktuelle installasjonen, for eksempel SSH
+og tilgang til HA-konfigurasjonsmappen eller et egnet HACS-grensesnitt.
+En MCP-forbindelse må tilby egne installasjonsverktøy for å kunne gjøre dette.
+Vanlige verktøy for tilstandslesing, lysstyring og gjøremål er ikke tilstrekkelig.
+Oppgradering av Samvev og eventuell HA-omstart må være uttrykkelig avtalt.
+
+## Opprett nøkkel og velg deling
+
+Bruk en egen, tilbakekallbar tilgangsnøkkel. Ikke legg en administratorøkt,
+nettlesercookie, HA-nøkkel eller skjermcookie inn i integrasjonens oppsett.
+
+[Oppsettskommandoen](scripts/provision_connection.py) bruker en midlertidig
+Samvev-administratorøkt til å velge deling og opprette forbindelsens nøkkel.
+Deretter logger den ut administratorøkten. HA får bare den nye nøkkelen.
+Eksempel fra en maskin du stoler på, med Python 3.13:
 
 ```bash
 python scripts/provision_connection.py \
   --url https://samvev.example.invalid --email manager@example.invalid \
   --name 'Samvev HA' --share-groceries --write-groceries \
   --share-household --messages --write-messages --calendar --write-calendar \
-  --output /private/samvev-ha-connection.json
+  --output "$HOME/samvev-ha-tilkobling.json"
 ```
 
-Replace the example URL/email and choose a private, writable output directory.
-The password is prompted without echo. The new file has mode 0600 and contains
-`base_url` and `api_token` for HA setup. It is never printed or added to this repo.
-Read-only access is obtained by omitting the respective `--write-*` switches.
-`--inspect` lists available households, people and imported calendar source IDs
-without creating a credential. Use `--household UUID` when needed, repeat
-`--person UUID` to share person-reader content, and `--calendar-source UUID` to
-select each imported calendar. Subject/person association alone does not grant
-access. See [sharing and revocation](docs/installation.md#sharing-and-revocation).
+Erstatt eksempeladressen og e-postadressen. Passordet oppgis uten at det vises.
+Filen opprettes med filmodus `0600` og inneholder `base_url` og `api_token` til
+HA-oppsettet. Nøkkelen skrives ikke til terminalen eller inn i repoet.
+
+Utelat de aktuelle `--write-*`-flaggene for skrivebeskyttet tilgang. Bruk
+`--inspect` for å finne tilgjengelige husstander, personer og kalenderkilder uten
+å opprette en nøkkel. Velg `--household UUID` ved behov, gjenta `--person UUID`
+for personers lesertilgang og `--calendar-source UUID` for hver importert kalender.
+Hvem innholdet gjelder og hvem som kan lese det, er separate valg.
+Se [deling og tilbakekalling](docs/installation.md#endre-deling-eller-trekk-tilbake-tilgang).
 
 ## Dashboard
 
-Use [examples/dashboard.yaml](examples/dashboard.yaml) as the raw configuration
-of a new dashboard. It uses native to-do, Markdown, status and calendar cards.
-Rename its entity IDs to those shown in your HA installation; the example assumes
-a connection named **Samvev HA**. Its day-plan Markdown card reads a two-day projection from the standard calendar
-entity, including every permitted overlapping appointment.
+[Dashboardveiledningen på norsk](docs/dashboard.md) forklarer hvordan du bruker
+[examples/dashboard.yaml](examples/dashboard.yaml) som rå konfigurasjon for et
+nytt HA-dashboard. Det bruker innebygde gjøremåls-, Markdown- og statuskort og
+viser en komplett plan for i dag og i morgen fra kalenderentiteten.
 
-For a richer **today + tomorrow** view, replace the day-plan Markdown card with
-[Calendar Card Pro](examples/calendar-card-pro.yaml), or
-[Week Planner Card](examples/week-planner.yaml). Install the chosen card separately
-through HACS. Both are optional: the integration's standard calendar entities work
-with native cards, other cards and automations. See [dashboard setup](docs/dashboard.md).
+Tilpass entitets-ID-ene til dem HA faktisk har opprettet. Eksemplet forutsetter
+at forbindelsen heter **Samvev HA**.
 
-## Actions
+For en annen kalenderpresentasjon kan dagsplankortet byttes med
+[Calendar Card Pro](examples/calendar-card-pro.yaml) eller
+[Week Planner Card](examples/week-planner.yaml). Installer valgt kort separat
+via HACS. Begge er valgfrie; standardentitetene kan brukes av andre kort og
+vanlige HA-automasjoner.
 
-Normal HA `todo.add_item`, `todo.update_item`, `todo.remove_item`,
-`calendar.get_events` and `calendar.create_event` work through the standard entities.
-Calendar edit/delete are available through HA's calendar interface. Imported
-calendars have no write feature flags. Native recurring creation is unsupported;
-existing provider recurrence instances are read from Samvev's import projection.
+## Handlinger
+
+Vanlige HA-handlinger som `todo.add_item`, `todo.update_item`, `todo.remove_item`,
+`calendar.get_events` og `calendar.create_event` bruker standardentitetene.
+Kalendergrensesnittet støtter også endring og sletting av egne avtaler.
+Importerte kalendere annonserer ingen skrivefunksjoner. Oppretting av egne
+repeterende avtaler støttes ikke; allerede importerte forekomster hentes fra Samvev.
 
 ```yaml
 action: samvev.create_message
@@ -114,17 +132,18 @@ data:
 response_variable: created_message
 ```
 
-`samvev.update_message` and `samvev.withdraw_message` take `message_id` and
-optionally `expected_revision` and `request_key`. Updates may change body,
-audience, importance, publication and expiry. Without an explicit revision they
-use the last observed message revision. Stale changes fail and refresh; they are
-never silently applied over somebody else's edit. Only this connection's own
-messages are writable. Select `config_entry_id` when several connections are loaded.
-Use a stable, non-secret request key for retries of one automation operation and
-a new key for a new operation. No action creates rendered/read/acknowledged or
-task-completion receipts. See [protocol and limitations](docs/api-contract.md).
+`samvev.update_message` og `samvev.withdraw_message` tar `message_id` og eventuelt
+`expected_revision` og `request_key`. Endring kan gjelde tekst, målgruppe,
+viktighet, publisering og utløp. Uten angitt revisjon brukes sist observerte
+revisjon. Samtidige endringer gir en synlig konflikt og ny henting, ikke stille
+overskriving. HA kan bare endre beskjeder som denne forbindelsen selv har opprettet.
 
-## Verification and development
+Velg `config_entry_id` når flere forbindelser er lastet. Bruk samme ikke-hemmelige
+forespørselsnøkkel for nye forsøk på én handling, og en ny nøkkel for en ny handling.
+Ingen av handlingene registrerer visning, lesing, bekreftelse eller oppgavefullføring.
+De tekniske [API-detaljene og begrensningene](docs/api-contract.md) er på engelsk.
+
+## Testing og utvikling
 
 ```bash
 uv sync --frozen
@@ -134,14 +153,16 @@ uv run ruff format --check .
 uv run mypy custom_components/samvev
 ```
 
-Tests use the real HA test harness. The separate
-[roundtrip procedure](docs/development.md) runs this integration against actual
-Samvev code and an isolated synthetic database; mock tests alone are not treated
-as proof of backend interoperability. See [validation evidence](docs/validation.md)
-for executed checks and remaining hardware limits.
+Testene bruker det faktiske HA-testmiljøet. Den engelske
+[utviklingsveiledningen](docs/development.md) beskriver også rundturer mot faktisk
+Samvev-kode og en isolert database med syntetiske data. Tester mot en simulert
+HTTP-server alene regnes ikke som bevis på samvirke mellom implementasjonene.
+Se [testbevis og skjermbilder](docs/validation.md) for utførte kontroller og
+konkrete begrensninger. Testrapporten er på engelsk.
 
-No change is installed on a running household's HA or Samvev by these development
-tests. Physical Shelly Wall Display XL validation is a separate check; browser
-viewport tests do not establish firmware/browser compatibility.
+Utviklingstestene installerer ingenting i en aktiv husstands HA eller Samvev.
+Fysisk Shelly Wall Display XL er ikke testet; nettleserkontroll ved tilsvarende
+skjermstørrelse bekrefter ikke fastvarens oppførsel eller vedvarende innlogging.
 
-MIT; see [LICENSE](LICENSE). Backend changes remain in the separate AGPL Samvev repo.
+MIT-lisens; se [LICENSE](LICENSE). Serverendringene ligger i det separate
+Samvev-repoet og følger dets AGPL-lisens.
