@@ -10,7 +10,9 @@ AI-motor eller ny familiedatabase.
 - **Beskjeder:** alle aktive delte beskjeder, med avsender, målgruppe,
   publisering, utløp, viktighet og revisjon. Sensorens tilstand er et antall;
   hele beskjedlisten finnes i attributtene. Handlinger oppretter, endrer og
-  trekker tilbake beskjeder som forbindelsen selv har opprettet.
+  trekker tilbake beskjeder som forbindelsen selv har opprettet. Med uttrykkelig
+  serverpolicy etter migrasjon 048 kan også delte, native UI-beskjeder endres,
+  med bevart originalforfatter og forbindelsen som endringsaktør.
 - **Kalender:** vanlige kalenderentiteter med alle hendelser i et forespurt
   tidsrom. Opprett, endre og avlys egne Samvev-avtaler. Importerte Google-,
   Outlook-, ICS-, Spond- og HA-kalendere velges uttrykkelig og er skrivebeskyttet.
@@ -115,7 +117,7 @@ vanlige HA-automasjoner.
 
 Vanlige HA-handlinger som `todo.add_item`, `todo.update_item`, `todo.remove_item`,
 `calendar.get_events` og `calendar.create_event` bruker standardentitetene.
-Kalendergrensesnittet støtter også endring og sletting av egne avtaler.
+HAs kalendergrensesnitt støtter også endring og sletting av egne avtaler.
 Importerte kalendere annonserer ingen skrivefunksjoner. Oppretting av egne
 repeterende avtaler støttes ikke; allerede importerte forekomster hentes fra Samvev.
 
@@ -136,7 +138,14 @@ response_variable: created_message
 `expected_revision` og `request_key`. Endring kan gjelde tekst, målgruppe,
 viktighet, publisering og utløp. Uten angitt revisjon brukes sist observerte
 revisjon. Samtidige endringer gir en synlig konflikt og ny henting, ikke stille
-overskriving. HA kan bare endre beskjeder som denne forbindelsen selv har opprettet.
+overskriving. Som standard kan HA bare endre beskjeder denne forbindelsen har
+opprettet. En administrator kan etter migrasjon 048 uttrykkelig aktivere
+`allowSharedNativeWrites` for eksisterende, delte UI-beskjeder og andre aktive
+HA-forbindelsers native avtaler i samme husstand. Hele målgruppen må fortsatt
+være tillatt. Importerte avtaler og arbeids-/systemgenererte beskjeder forblir
+skrivebeskyttet. Samvevs webgrensesnitt har ingen lokal kalendereditor; det
+påstås ingen rundtur for UI-opprettede lokale avtaler. Se
+[valg og begrensninger](docs/installation.md#gjenbruk-én-forbindelse-og-del-alle-nåværende-personer-og-kilder).
 
 Velg `config_entry_id` når flere forbindelser er lastet. Bruk samme ikke-hemmelige
 forespørselsnøkkel for nye forsøk på én handling, og en ny nøkkel for en ny handling.

@@ -137,7 +137,7 @@
     },
     "update_message": {
       "name": "Endre beskjed",
-      "description": "Endre en beskjed opprettet av denne forbindelsen. Uten angitt revisjon brukes sist observerte revisjon. Samtidige endringer gir en synlig feil.",
+      "description": "Endre en native beskjed som Samvev tillater. Delte UI-beskjeder krever uttrykkelig serverpolicy etter migrasjon 048; originalforfatteren beholdes. Uten angitt revisjon brukes sist observerte revisjon. Samtidige endringer gir en synlig feil.",
       "fields": {
         "config_entry_id": {
           "name": "Samvev-forbindelse",
@@ -176,7 +176,7 @@
     },
     "withdraw_message": {
       "name": "Trekk tilbake beskjed",
-      "description": "Trekk tilbake en beskjed opprettet av denne forbindelsen. Handlingen oppretter ingen lese- eller fullføringskvittering.",
+      "description": "Trekk tilbake en native beskjed som Samvev tillater. Delte UI-beskjeder krever uttrykkelig serverpolicy etter migrasjon 048. Handlingen oppretter ingen lese- eller fullføringskvittering.",
       "fields": {
         "config_entry_id": {
           "name": "Samvev-forbindelse",

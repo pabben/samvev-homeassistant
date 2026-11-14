@@ -12,16 +12,16 @@ på HA 2026.2.3; dette er ikke en bekreftelse på testing av alle nyere HA-versj
 HA-miljøet må ha Python 3.13.2 eller nyere. Du trenger ikke installere Python
 separat i en vanlig HA OS-installasjon.
 
-Samvev-endringen må installeres først. Den ligger i
-[Samvev-PR #28](https://github.com/pabben/samvev/pull/28), på grenen
-`feat/native-ha-bridge`, testet ved commit
-`5aae5e0719bea79edbc4bcdd6a174d2664b95388`. Den legger til migrasjonen
-`047_home_assistant_bridge.sql`. Utviklingsgrunnlaget er `feat/m3-family-hub`
-ved `a298203`.
+Samvev-endringen må installeres først. Grunnstøtten er flettet gjennom
+[Samvev-PR #28](https://github.com/pabben/samvev/pull/28) til
+`feat/m3-family-hub` og legger til `047_home_assistant_bridge.sql`.
+Utvidet skriving til eksisterende Samvev-innhold krever også migrasjon **048**
+fra [Samvev-PR #31](https://github.com/pabben/samvev/pull/31) og uttrykkelig
+deling som beskrevet nedenfor.
 
 Følg Samvevs vanlige rutine for sikkerhetskopi og databasemigrasjon når en
 oppgradering er avtalt. Denne veiledningen installerer eller oppgraderer ikke en
-aktiv instans automatisk. [API-kontrakten](https://github.com/pabben/samvev/blob/feat/native-ha-bridge/docs/implementation/HA_BRIDGE_API.md)
+aktiv instans automatisk. [API-kontrakten](https://github.com/pabben/samvev/blob/feat/m3-family-hub/docs/implementation/HA_BRIDGE_API.md)
 beskriver serverkravene. PR #25, som bygger inn Samvevs nettside i HA, er en
 uavhengig løsning og er ikke nødvendig her.
 
@@ -37,12 +37,21 @@ Verktøy som bare leser entiteter, styrer lys eller behandler gjøremål, gir ik
 installasjonsadgang. MCP-navnet alene sier derfor ikke om en forbindelse kan
 installere integrasjoner. Ingen offentlig eksponering av HA er nødvendig.
 
+## Forbered bare Samvev og tilkoblingsfilen
+
+En oppgave som gjelder serveroppgradering og oppretting av tilgangsnøkkel,
+installerer ikke noe i Home Assistant. Den kan avsluttes med en kontrollert
+Samvev-forbindelse og stien til den private filen. HACS-installasjon, kopiering
+til HA, HA-omstart, GUI-oppsett, dashboard og fysisk Shelly-test er egne steg som
+venter til de er avtalt. CLI-et nedenfor utfører ingen av disse HA-stegene og
+endrer ikke miljøfiler, nettverksvern, proxy, vault eller leverandørtilkoblinger.
+
 ## 1. Installer integrasjonen i HA
 
-### Via HACS etter at endringen er slått sammen
+### Via HACS
 
-Når [HA-PR #1](https://github.com/pabben/samvev-homeassistant/pull/1) er slått
-sammen til standardgrenen:
+[HA-PR #1](https://github.com/pabben/samvev-homeassistant/pull/1) er flettet til
+`main`. Installer integrasjonen som egendefinert repo:
 
 1. Åpne menyen for egendefinerte repoer i HACS. På engelsk heter den **Custom repositories**.
 2. Legg til `https://github.com/pabben/samvev-homeassistant` med kategorien **Integration**.
@@ -53,9 +62,9 @@ sammen til standardgrenen:
 Dette er installasjon som egendefinert HACS-repo. Integrasjonen er ikke oppgitt
 som godkjent i HACS sitt standardutvalg.
 
-### Manuelt fra arbeidsgrenen eller ZIP-pakken
+### Manuelt fra main eller ZIP-pakken
 
-Før PR-en er slått sammen kan du laste ned [arbeidsgrenen som ZIP](https://github.com/pabben/samvev-homeassistant/archive/refs/heads/feat/native-ha-entities.zip),
+Du kan laste ned [main som ZIP](https://github.com/pabben/samvev-homeassistant/archive/refs/heads/main.zip),
 eller integrasjonspakken fra en vellykket [GitHub Actions-kjøring](https://github.com/pabben/samvev-homeassistant/actions/workflows/validate.yaml):
 
 1. Pakk ut arkivet.
@@ -71,7 +80,8 @@ kopieres inn i HA.
 
 Kjør [scripts/provision_connection.py](../scripts/provision_connection.py) på en
 maskin du stoler på. Skriptet bruker Pythons standardbibliotek og trenger ikke
-HA-utviklingsmiljøet. Eksemplene forutsetter Python 3.13.
+HA-utviklingsmiljøet. Eksemplene forutsetter Python 3.13 på Unix/Linux.
+En lokal fillås hindrer samtidige kjøringer mot samme nøkkelfil.
 
 Du oppgir en Samvev-administrators passord i en skjult ledetekst. Skriptet bruker
 en midlertidig administratorøkt til å opprette forbindelsen og logger deretter
@@ -116,10 +126,86 @@ Importerte kalendere beholder sine eksisterende leserrettigheter og er
 skrivebeskyttet i HA. Skrivehandlinger som returnerer innhold, krever både lese-
 og skriverettighet for den aktuelle innholdstypen.
 
-Skriptet oppretter en ny fil med filmodus `0600`, altså bare tilgjengelig for
-filens eier. Det overskriver ikke en eksisterende fil og skriver ikke nøkkelen
-til terminalen. Ved feil under deling eller filopprettelse forsøker det å
-avslutte den ufullstendige forbindelsen. Det følger ikke HTTP-omdirigeringer.
+### Gjenbruk én forbindelse og del alle nåværende personer og kilder
+
+Følgende kommando velger alle seks `ha.*`-rettigheter, den eksisterende
+handlelisten, husstandsrettet innhold og alle personer og kalenderkilder som
+finnes i den valgte husstanden ved kjøringen:
+
+```bash
+python scripts/provision_connection.py \
+  --url https://samvev.example.invalid --email manager@example.invalid \
+  --name 'Samvev HA' --household HOUSEHOLD_UUID \
+  --share-groceries --write-groceries \
+  --messages --write-messages --calendar --write-calendar \
+  --share-household --all-current-persons --all-current-calendar-sources \
+  --allow-shared-native-writes --reuse-existing \
+  --output "$HOME/samvev-ha-tilkobling.json"
+```
+
+`--allow-shared-native-writes` krever serverendringen med migrasjon **048** og
+policyfeltet `allowSharedNativeWrites`. Feltet er som standard `false`; flagget
+gir uttrykkelig tillatelse til å endre og trekke tilbake **eksisterende beskjeder
+opprettet i Samvevs webgrensesnitt**, når hele målgruppen er tillatt. Det tillater
+også endring og avlysning av ekte, native Samvev-avtaler opprettet av en annen
+aktiv HA-forbindelse i samme husstand. Serveren kontrollerer målgruppe og revisjon
+for hver handling. Det gir ikke skriverettighet hos Google,
+Outlook eller Spond. Originalforfatteren beholdes, og HA-forbindelsen registreres
+som aktør for endringen. Flagget skal bare brukes når slik skriving er avtalt;
+utelat det for den tidligere begrensningen til forbindelsens eget innhold.
+Arbeids-/systemgenererte beskjeder og generelle eksterne produsenters avtaler
+forblir skrivebeskyttet. Eksisterende skjermmottakere kan beholdes ved uttrykkelig
+husstandsfullmakt, men HA kan ikke legge til eller erstatte skjermmottakere.
+
+Det undersøkte Samvev-webgrensesnittet har **ingen lokal kalendereditor eller
+medlems-API for å opprette, endre og slette egne avtaler**. Det viser avtaler og
+administrerer kalenderimporter. Denne leveransen legger ikke til en slik editor;
+kalenderens skrivefunksjoner gjelder de eksisterende native HA-avtalene. En
+rundtur fra UI-opprettet lokal avtale er derfor ikke påstått. HAs eget
+kalendergrensesnitt kan fortsatt opprette og endre støttede native avtaler.
+
+Personene velges som **lesere**, uavhengig av hvem avtaler gjelder. Alle valgte
+ID-er kontrolleres mot samme husstand. Kalenderutvalget omfatter nåværende
+kilde-ID-er som Samvev returnerer, også deaktiverte kilder i eksisterende
+forbindelser. CLI-et aktiverer eller gjenkobler ikke kilder og endrer ikke deres
+leserrettigheter. Bare gyldig, tillatt kildeinnhold blir tilgjengelig i HA.
+
+Dette er et **statisk øyeblikksvalg**. Personer og kilder som opprettes senere,
+blir ikke automatisk delt. For å ta dem med må administratoren uttrykkelig kjøre
+kommandoen igjen med de aktuelle `--all-current-*`-flaggene. Alle delingsvalg i
+kommandoen erstatter hele forbindelsens eksportregel; behold derfor de ønskede
+flaggene ved senere kjøringer. Utelatte valg kan fjerne tidligere deling.
+
+Når `--output` ikke finnes, oppretter skriptet én ny forbindelse og en ny fil med
+filmodus `0600`, altså bare tilgjengelig for filens eier. Normal utskrift er
+**bare filstien**. Nøkkel, administratorpassord, personnavn, kilde-ID-er og
+innhold skrives ikke ut. `--inspect` er det separate, uttrykkelige
+administrasjonsvalget som viser ID-er og navn.
+
+Med `--reuse-existing` og en eksisterende fil kontrolleres filtype, eier, modus
+`0600`, baseadresse, husstand, forbindelsesidentitet, nøkkel og nøyaktige
+rettigheter før deling kan endres. Filen må være en vanlig fil uten symbolsk
+lenke eller ekstra hardlenker. Nøkkelen kontrolleres som separat bearer-identitet,
+uten administratorcookies. Ved uendret deling opprettes verken ny forbindelse,
+ny nøkkel eller ny delingsrevisjon. Nøkkelfilen overskrives ikke. Endret deling
+sendes én gang med observert `expectedRevision`; en konflikt krever ny vurdering,
+ikke blind overskriving. En tom, privat `.lock`-fil ved siden av nøkkelfilen
+brukes for å hindre lokale parallelle kjøringer. Låsen slippes når prosessen
+avsluttes; låsfilen kan bli liggende.
+
+Uten `--reuse-existing` stanser en eksisterende fil kjøringen før innlogging.
+En avvist nøkkel, annen husstand eller manglende rettigheter stanser gjenbruk;
+skriptet roterer ikke nøkler automatisk. Hvis filen mangler og en aktiv
+forbindelse allerede har samme navn, opprettes ingen dublett. Gjenfinn den
+private nøkkelfilen eller avklar den eksisterende forbindelsen i Samvev.
+
+Ved feil etter nyoppretting forsøker skriptet å tilbakekalle **bare den nye
+forbindelsen**. En gjenbrukt forbindelse tilbakekalles aldri som feilopprydding.
+Ved tapt svar under selve opprettingen gjentas ikke POST automatisk: serveren
+kan allerede ha opprettet forbindelsen. Kontroller metadata i Samvev før videre
+forsøk. Opprettings-API-et gir ingen garanti om nøyaktig én oppretting over et
+uavklart nettverksavbrudd eller mellom forskjellige nøkkelfiler/maskiner.
+Skriptet følger ikke HTTP-omdirigeringer og lagrer ikke administratorøkten.
 
 ## 3. Koble til i HA
 

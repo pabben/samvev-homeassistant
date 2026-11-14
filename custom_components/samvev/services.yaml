@@ -47,7 +47,7 @@ create_message:
         text:
 update_message:
   name: Update message
-  description: Update a message authored by this connection. Omitted revision uses the last observed message revision; conflicting edits fail visibly.
+  description: Update a native message permitted by Samvev. Shared UI messages require explicit server policy after migration 048; the original author is preserved. Omitted revision uses the last observed revision; conflicts fail visibly.
   fields:
     config_entry_id:
       name: Samvev connection
@@ -97,7 +97,7 @@ update_message:
         text:
 withdraw_message:
   name: Withdraw message
-  description: Withdraw a message authored by this connection, without creating a read or completion receipt.
+  description: Withdraw a native message permitted by Samvev. Shared UI messages require explicit server policy after migration 048. This creates no read or completion receipt.
   fields:
     config_entry_id:
       name: Samvev connection

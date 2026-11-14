@@ -14,10 +14,10 @@ adapter's provisional `/context`, `/ask` and `/events` protocol is replaced.
 | `POST /lists/groceries/items` | Add label and checked state |
 | `PATCH, DELETE /lists/groceries/items/:id` | Revision-protected edit/check/reopen or deletion |
 | `POST /messages` | Create as this connection, targeting only allowed recipients |
-| `PATCH /messages/:id`, `POST /messages/:id/withdraw` | Edit/withdraw this connection's own message |
+| `PATCH /messages/:id`, `POST /messages/:id/withdraw` | Edit/withdraw a native message permitted by the current write policy |
 | `GET /calendars/:id/events?start=…&end=…` | All overlapping allowed events in the exact interval, up to 366 days |
 | `POST /calendars/samvev/events` | Create an own Samvev event |
-| `PATCH, DELETE /calendars/samvev/events/:id` | Edit/cancel own event using its observed revision |
+| `PATCH, DELETE /calendars/samvev/events/:id` | Edit/cancel a permitted native event using its observed revision |
 
 JSON field names are camelCase. HA action input uses HA-style snake_case and
 converts at the client boundary. Every mutation carries `requestKey`; edits and
@@ -62,4 +62,23 @@ Samvev person. The durable audit actor is the integration connection and credent
 
 Known model limits: one existing grocery board; grocery fields are label/checked
 only; own calendar recurrence creation is unsupported; imported provider writes
-are unsupported; HA can edit/withdraw only its own messages and calendar events.
+are unsupported. By default HA can edit/withdraw only its own messages and native
+calendar events.
+
+Migration **048** adds manager-owned `allowSharedNativeWrites`, default `false`.
+An explicit opt-in permits shared native messages created in Samvev's web UI and
+genuine native appointments authored by another active HA connection in the same
+household. Both the complete persisted audience and any proposed audience must
+remain granted. Original authors and event/source identities are preserved; the
+editing integration connection is recorded in audit/lifecycle events. Existing
+active display recipients require household sharing and cannot be added or
+replaced by HA. Worker/system message provenance, generic external producers and
+all provider calendar occurrences remain read-only. Forging a native marker does
+not bypass provider metadata or an occurrence relation.
+
+The inspected Samvev web UI configures calendar providers and displays imported
+appointments; it has no local appointment editor/member CRUD API. No roundtrip
+for UI-created local appointments is claimed and no new calendar editor is added.
+HA's standard calendar interface still operates on the supported native events.
+Provisioning and static reader/source selection are documented in the
+[installation guide](installation.md).
